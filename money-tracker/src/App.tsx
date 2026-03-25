@@ -15,6 +15,7 @@ import {
   Settings, LogOut, Layers, User, Eye, EyeOff
 } from 'lucide-react'
 
+type AuthMode = 'login' | 'signup' | 'forgot' | 'reset'
 type Page = 'home' | 'budget' | 'analytics' | 'categories' | 'ledgers' | 'admin'
 
 async function fetchUserAndLedger(
@@ -73,12 +74,16 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home')
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [isAuthPage, setIsAuthPage] = useState(true)
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
+  const [authMode, setAuthMode] = useState<AuthMode>('login')
+  const [loginId, setLoginId] = useState('')   // 用户名或邮箱
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [name, setName] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -91,17 +96,40 @@ function App() {
     checkAuth()
   }, [setUser, setCurrentLedger])
 
+  // 检测 URL hash 是否是密码重置回调
+  useEffect(() => {
+    if (window.location.hash.includes('reset-password')) {
+      setIsAuthPage(true)
+      setAuthMode('reset')
+    }
+  }, [])
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     try {
-      if (authMode === 'signup') {
-        const { error } = await authService.signUp(email, password, name)
+      if (authMode === 'forgot') {
+        // 发送密码重置邮件
+        const { error } = await authService.resetPassword(loginId || email)
+        if (error) throw error
+        setResetSent(true)
+      } else if (authMode === 'reset') {
+        // 设置新密码
+        const { error } = await authService.updatePassword(newPassword)
+        if (error) throw error
+        setResetSuccess(true)
+        setTimeout(() => {
+          window.location.hash = ''
+          setAuthMode('login')
+          setResetSuccess(false)
+        }, 2000)
+      } else if (authMode === 'signup') {
+        const { error } = await authService.signUp(loginId || email, password, name)
         if (error) throw error
         alert('注册成功！请等待管理员审核后登录')
         setAuthMode('login')
       } else {
-        const { error } = await authService.signIn(email, password)
+        const { error } = await authService.signIn(loginId || email, password)
         if (error) throw error
         const currentUser = await authService.getCurrentUser()
         if (currentUser) {
@@ -110,7 +138,7 @@ function App() {
         }
       }
     } catch (error: any) {
-      alert(error.message || '认证失败')
+      alert(error.message || '操作失败')
     } finally {
       setIsLoading(false)
     }
@@ -121,107 +149,189 @@ function App() {
     setUser(null)
     setCurrentLedger(null)
     setIsAuthPage(true)
+    setLoginId('')
     setEmail('')
     setPassword('')
     setName('')
+    setAuthMode('login')
   }
 
   // ─── 登录/注册页面 ────────────────────────────────────────────────
   if (isAuthPage) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 flex items-center justify-center p-4">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-white opacity-5 rounded-full" />
-          <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-white opacity-5 rounded-full" />
-        </div>
+    // 标题和副标题映射
+    const modeConfig = {
+      login:  { title: '欢迎回来',   sub: '登录你的账号' },
+      signup: { title: '创建账号',   sub: '开始记录你的财务' },
+      forgot: { title: '找回密码',   sub: '输入账号，我们发送重置链接' },
+      reset:  { title: '设置新密码', sub: '请输入你的新密码' },
+    }
+    const cfg = modeConfig[authMode]
 
-        <div className="relative w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-white bg-opacity-20 rounded-3xl mb-4 backdrop-blur-sm">
-              <span className="text-4xl">💰</span>
+    return (
+      <div style={{
+        minHeight: '100dvh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 60%, #f093fb 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', position: 'relative', overflow: 'hidden'
+      }}>
+        {/* 背景装饰 */}
+        <div style={{ position:'absolute', top:'-60px', right:'-60px', width:'200px', height:'200px', background:'rgba(255,255,255,0.06)', borderRadius:'50%' }} />
+        <div style={{ position:'absolute', bottom:'-80px', left:'-80px', width:'260px', height:'260px', background:'rgba(255,255,255,0.06)', borderRadius:'50%' }} />
+
+        <div style={{ width:'100%', maxWidth:'360px', position:'relative' }}>
+          {/* Logo */}
+          <div style={{ textAlign:'center', marginBottom:'24px' }}>
+            <div style={{
+              display:'inline-flex', alignItems:'center', justifyContent:'center',
+              width:'68px', height:'68px', borderRadius:'22px',
+              background:'rgba(255,255,255,0.2)', backdropFilter:'blur(10px)', marginBottom:'12px'
+            }}>
+              <span style={{ fontSize:'34px' }}>💰</span>
             </div>
-            <h1 className="text-3xl font-bold text-white">钱迹</h1>
-            <p className="text-white text-opacity-80 mt-1">智能记账，轻松管理财务</p>
+            <div style={{ color:'white', fontSize:'22px', fontWeight:700 }}>{cfg.title}</div>
+            <div style={{ color:'rgba(255,255,255,0.75)', fontSize:'13px', marginTop:'4px' }}>{cfg.sub}</div>
           </div>
 
-          <div className="bg-white rounded-3xl shadow-2xl p-8">
-            <div className="flex bg-gray-100 rounded-2xl p-1 mb-6">
-              <button
-                onClick={() => setAuthMode('login')}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                  authMode === 'login' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'
-                }`}
-              >
-                登录
-              </button>
-              <button
-                onClick={() => setAuthMode('signup')}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                  authMode === 'signup' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500'
-                }`}
-              >
-                注册
-              </button>
-            </div>
+          {/* 卡片 */}
+          <div style={{ background:'white', borderRadius:'24px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
 
-            <form onSubmit={handleAuth} className="space-y-4">
+            {/* Tab（仅登录/注册显示） */}
+            {(authMode === 'login' || authMode === 'signup') && (
+              <div style={{ display:'flex', background:'#f3f4f6', margin:'16px 16px 0', borderRadius:'14px', padding:'4px' }}>
+                {(['login','signup'] as const).map(m => (
+                  <button key={m} onClick={() => setAuthMode(m)} style={{
+                    flex:1, padding:'9px 0', borderRadius:'10px', border:'none', cursor:'pointer',
+                    fontSize:'14px', fontWeight:600, transition:'all 0.2s',
+                    background: authMode === m ? 'white' : 'transparent',
+                    color: authMode === m ? '#6366f1' : '#9ca3af',
+                    boxShadow: authMode === m ? '0 1px 4px rgba(0,0,0,0.1)' : 'none'
+                  }}>
+                    {m === 'login' ? '登录' : '注册'}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <form onSubmit={handleAuth} style={{ padding:'16px 16px 20px', display:'flex', flexDirection:'column', gap:'12px' }}>
+
+              {/* 密码重置成功 */}
+              {authMode === 'reset' && resetSuccess && (
+                <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'12px', textAlign:'center', color:'#16a34a', fontSize:'14px' }}>
+                  ✅ 密码已更新，正在跳转...
+                </div>
+              )}
+
+              {/* 找回密码发送成功 */}
+              {authMode === 'forgot' && resetSent && (
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'12px', color:'#1d4ed8', fontSize:'13px', lineHeight:'1.5' }}>
+                  📧 重置链接已发送！<br/>请检查你的邮箱，点击链接设置新密码。
+                </div>
+              )}
+
+              {/* 姓名（注册） */}
               {authMode === 'signup' && (
-                <div className="relative">
-                  <User className="absolute left-4 top-3.5 text-gray-400" size={18} />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="您的姓名"
-                    className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                <div style={{ position:'relative' }}>
+                  <span style={{ position:'absolute', left:'13px', top:'11px', fontSize:'16px' }}>👤</span>
+                  <input type="text" value={name} onChange={e => setName(e.target.value)}
+                    placeholder="姓名（可选）"
+                    style={{ width:'100%', paddingLeft:'38px', paddingRight:'14px', paddingTop:'11px', paddingBottom:'11px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'14px', background:'#f9fafb', outline:'none', boxSizing:'border-box' }}
                   />
                 </div>
               )}
 
-              <div className="relative">
-                <span className="absolute left-4 top-3.5 text-gray-400 text-sm font-medium">@</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="邮箱地址"
-                  className="w-full pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                />
-              </div>
+              {/* 用户名/邮箱（登录、注册、找回密码） */}
+              {authMode !== 'reset' && (
+                <div style={{ position:'relative' }}>
+                  <span style={{ position:'absolute', left:'13px', top:'11px', fontSize:'15px' }}>
+                    {authMode === 'forgot' ? '📧' : '👤'}
+                  </span>
+                  <input
+                    type="text"
+                    value={loginId}
+                    onChange={e => setLoginId(e.target.value)}
+                    placeholder={authMode === 'forgot' ? '邮箱地址' : '用户名或邮箱'}
+                    style={{ width:'100%', paddingLeft:'38px', paddingRight:'14px', paddingTop:'11px', paddingBottom:'11px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'14px', background:'#f9fafb', outline:'none', boxSizing:'border-box' }}
+                  />
+                </div>
+              )}
 
-              <div className="relative">
-                <span className="absolute left-4 top-3.5 text-gray-400">🔒</span>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="密码"
-                  className="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-3.5 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              {/* 密码（登录、注册） */}
+              {(authMode === 'login' || authMode === 'signup') && (
+                <div style={{ position:'relative' }}>
+                  <span style={{ position:'absolute', left:'13px', top:'11px', fontSize:'14px' }}>🔒</span>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password} onChange={e => setPassword(e.target.value)}
+                    placeholder="密码"
+                    style={{ width:'100%', paddingLeft:'36px', paddingRight:'44px', paddingTop:'11px', paddingBottom:'11px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'14px', background:'#f9fafb', outline:'none', boxSizing:'border-box' }}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    style={{ position:'absolute', right:'12px', top:'10px', background:'none', border:'none', cursor:'pointer', color:'#9ca3af', padding:'2px' }}>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              )}
+
+              {/* 新密码（重置） */}
+              {authMode === 'reset' && (
+                <div style={{ position:'relative' }}>
+                  <span style={{ position:'absolute', left:'13px', top:'11px', fontSize:'14px' }}>🔑</span>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                    placeholder="输入新密码"
+                    style={{ width:'100%', paddingLeft:'36px', paddingRight:'44px', paddingTop:'11px', paddingBottom:'11px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'14px', background:'#f9fafb', outline:'none', boxSizing:'border-box' }}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)}
+                    style={{ position:'absolute', right:'12px', top:'10px', background:'none', border:'none', cursor:'pointer', color:'#9ca3af', padding:'2px' }}>
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              )}
+
+              {/* 忘记密码链接（仅登录页） */}
+              {authMode === 'login' && (
+                <div style={{ textAlign:'right', marginTop:'-4px' }}>
+                  <button type="button" onClick={() => setAuthMode('forgot')}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500 }}>
+                    忘记密码？
+                  </button>
+                </div>
+              )}
+
+              {/* 提交按钮 */}
+              {!(authMode === 'forgot' && resetSent) && (
+                <button type="submit" disabled={isLoading}
+                  style={{
+                    width:'100%', padding:'13px', border:'none', borderRadius:'12px', cursor:'pointer',
+                    fontSize:'15px', fontWeight:700, color:'white', marginTop:'4px',
+                    background:'linear-gradient(135deg, #667eea, #764ba2)',
+                    boxShadow:'0 4px 15px rgba(102,126,234,0.45)',
+                    opacity: isLoading ? 0.6 : 1, transition:'all 0.2s'
+                  }}>
+                  {isLoading ? '处理中...' : {
+                    login: '登 录', signup: '注 册', forgot: '发送重置链接', reset: '确认新密码'
+                  }[authMode]}
                 </button>
+              )}
+
+              {/* 底部提示 */}
+              <div style={{ textAlign:'center', fontSize:'13px', color:'#9ca3af' }}>
+                {authMode === 'signup' && '注册后需等待管理员审核才能使用'}
+                {(authMode === 'forgot' || authMode === 'reset') && (
+                  <button type="button" onClick={() => { setAuthMode('login'); setResetSent(false) }}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500 }}>
+                    ← 返回登录
+                  </button>
+                )}
               </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white py-3.5 rounded-xl font-semibold hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-200 active:scale-95"
-              >
-                {isLoading ? '处理中...' : authMode === 'login' ? '登录' : '注册账号'}
-              </button>
             </form>
-
-            {authMode === 'signup' && (
-              <p className="text-xs text-gray-400 text-center mt-4">
-                注册后需等待管理员审核才能使用
-              </p>
-            )}
           </div>
+
+          {/* 底部品牌 */}
+          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize:'12px', marginTop:'16px' }}>
+            钱迹 · 智能记账
+          </p>
         </div>
       </div>
     )

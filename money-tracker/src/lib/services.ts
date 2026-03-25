@@ -1,16 +1,28 @@
 import { supabase } from './supabase'
 
+// 将用户名转换为内部邮箱格式
+function usernameToEmail(username: string): string {
+  // 如果已经是邮箱格式，直接返回
+  if (username.includes('@') && !username.endsWith('@qianji.app')) {
+    return username
+  }
+  // 否则转换为内部邮箱
+  return `${username.toLowerCase().replace(/\s+/g, '_')}@qianji.app`
+}
+
 export const authService = {
-  async signUp(email: string, password: string, name: string) {
+  async signUp(usernameOrEmail: string, password: string, name: string) {
+    const email = usernameToEmail(usernameOrEmail)
+    const displayName = name || usernameOrEmail
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: { name }
+        data: { name: displayName, username: usernameOrEmail }
       }
     })
-    
-    // 注册成功后，自动创建用户记录
+
     if (data.user && !error) {
       try {
         await supabase
@@ -18,7 +30,8 @@ export const authService = {
           .insert([{
             id: data.user.id,
             email: email,
-            name: name,
+            name: displayName,
+            username: usernameOrEmail,
             role: 'user',
             status: 'active'
           }])
@@ -26,11 +39,12 @@ export const authService = {
         console.error('Failed to create user record:', err)
       }
     }
-    
+
     return { data, error }
   },
 
-  async signIn(email: string, password: string) {
+  async signIn(usernameOrEmail: string, password: string) {
+    const email = usernameToEmail(usernameOrEmail)
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
@@ -47,8 +61,15 @@ export const authService = {
     return user
   },
 
-  async resetPassword(email: string) {
-    return await supabase.auth.resetPasswordForEmail(email)
+  async resetPassword(usernameOrEmail: string) {
+    const email = usernameToEmail(usernameOrEmail)
+    return await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}${window.location.pathname}#reset-password`
+    })
+  },
+
+  async updatePassword(newPassword: string) {
+    return await supabase.auth.updateUser({ password: newPassword })
   }
 }
 
