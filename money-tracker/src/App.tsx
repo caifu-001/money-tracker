@@ -10,9 +10,10 @@ import { Analytics } from './pages/Analytics'
 import { Categories } from './pages/Categories'
 import { QuickAdd } from './components/QuickAdd'
 import { FloatButton } from './components/FloatButton'
+import { Captcha } from './components/Captcha'
 import {
   Home as HomeIcon, Wallet, TrendingUp, BookOpen,
-  Settings, LogOut, Layers, User, Eye, EyeOff
+  Settings, LogOut, Layers, Eye, EyeOff
 } from 'lucide-react'
 
 type AuthMode = 'login' | 'signup' | 'forgot' | 'reset'
@@ -75,7 +76,7 @@ function App() {
   const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [isAuthPage, setIsAuthPage] = useState(true)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
-  const [loginId, setLoginId] = useState('')   // 用户名或邮箱
+  const [loginId, setLoginId] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -84,6 +85,11 @@ function App() {
   const [showPassword, setShowPassword] = useState(false)
   const [resetSent, setResetSent] = useState(false)
   const [resetSuccess, setResetSuccess] = useState(false)
+  // 验证码 & 安全
+  const [captchaValid, setCaptchaValid] = useState(false)
+  const [captchaKey, setCaptchaKey] = useState(0)   // 用于强制刷新验证码
+  const [failCount, setFailCount] = useState(0)
+  const [lockUntil, setLockUntil] = useState<number | null>(null)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -104,17 +110,43 @@ function App() {
     }
   }, [])
 
+  // 锁定倒计时
+  const [lockRemain, setLockRemain] = useState(0)
+  useEffect(() => {
+    if (!lockUntil) return
+    const timer = setInterval(() => {
+      const remain = Math.ceil((lockUntil - Date.now()) / 1000)
+      if (remain <= 0) {
+        setLockUntil(null)
+        setFailCount(0)
+        setLockRemain(0)
+        clearInterval(timer)
+      } else {
+        setLockRemain(remain)
+      }
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [lockUntil])
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // 检查锁定
+    if (lockUntil && Date.now() < lockUntil) return
+
+    // 登录/注册必须通过验证码
+    if ((authMode === 'login' || authMode === 'signup') && !captchaValid) {
+      alert('请先完成验证码')
+      return
+    }
+
     setIsLoading(true)
     try {
       if (authMode === 'forgot') {
-        // 发送密码重置邮件
         const { error } = await authService.resetPassword(loginId || email)
         if (error) throw error
         setResetSent(true)
       } else if (authMode === 'reset') {
-        // 设置新密码
         const { error } = await authService.updatePassword(newPassword)
         if (error) throw error
         setResetSuccess(true)
@@ -128,9 +160,27 @@ function App() {
         if (error) throw error
         alert('注册成功！请等待管理员审核后登录')
         setAuthMode('login')
+        setCaptchaKey(k => k + 1)
+        setCaptchaValid(false)
       } else {
+        // 登录
         const { error } = await authService.signIn(loginId || email, password)
-        if (error) throw error
+        if (error) {
+          // 登录失败，增加失败次数
+          const newFail = failCount + 1
+          setFailCount(newFail)
+          setCaptchaKey(k => k + 1)   // 刷新验证码
+          setCaptchaValid(false)
+          if (newFail >= 5) {
+            // 锁定 5 分钟
+            setLockUntil(Date.now() + 5 * 60 * 1000)
+            throw new Error('登录失败次数过多，账号已锁定 5 分钟')
+          } else {
+            throw new Error(`账号或密码错误（还剩 ${5 - newFail} 次机会）`)
+          }
+        }
+        // 登录成功，重置失败次数
+        setFailCount(0)
         const currentUser = await authService.getCurrentUser()
         if (currentUser) {
           await fetchUserAndLedger(currentUser, setUser, setCurrentLedger)
@@ -154,6 +204,10 @@ function App() {
     setPassword('')
     setName('')
     setAuthMode('login')
+    setCaptchaKey(k => k + 1)
+    setCaptchaValid(false)
+    setFailCount(0)
+    setLockUntil(null)
   }
 
   // ─── 登录/注册页面 ────────────────────────────────────────────────
@@ -272,20 +326,15 @@ function App() {
                 </div>
               )}
 
-              {/* 新密码（重置） */}
-              {authMode === 'reset' && (
-                <div style={{ position:'relative' }}>
-                  <span style={{ position:'absolute', left:'13px', top:'11px', fontSize:'14px' }}>🔑</span>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                    placeholder="输入新密码"
-                    style={{ width:'100%', paddingLeft:'36px', paddingRight:'44px', paddingTop:'11px', paddingBottom:'11px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'14px', background:'#f9fafb', outline:'none', boxSizing:'border-box' }}
-                  />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    style={{ position:'absolute', right:'12px', top:'10px', background:'none', border:'none', cursor:'pointer', color:'#9ca3af', padding:'2px' }}>
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+              {/* 验证码（登录/注册） */}
+              {(authMode === 'login' || authMode === 'signup') && (
+                <Captcha key={captchaKey} onVerify={setCaptchaValid} />
+              )}
+
+              {/* 锁定提示 */}
+              {lockUntil && Date.now() < lockUntil && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'10px 14px', color:'#dc2626', fontSize:'13px', textAlign:'center' }}>
+                  🔒 账号已锁定，请 {lockRemain} 秒后再试
                 </div>
               )}
 
@@ -348,44 +397,51 @@ function App() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100dvh', background: '#f3f4f6', paddingBottom: '70px', position: 'relative' }}>
       {/* 顶部导航 */}
-      <div className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">💰</span>
-            <span className="text-lg font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+      <div style={{
+        background: 'white', borderBottom: '1px solid #f0f0f0',
+        position: 'sticky', top: 0, zIndex: 30,
+        boxShadow: '0 1px 8px rgba(0,0,0,0.06)'
+      }}>
+        <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '22px' }}>💰</span>
+            <span style={{ fontSize: '17px', fontWeight: 700, background: 'linear-gradient(135deg,#6366f1,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               钱迹
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-full">
-              <div className="w-6 h-6 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">
-                  {(user?.name || user?.email || '?')[0].toUpperCase()}
-                </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f9fafb', padding: '5px 10px', borderRadius: '20px' }}>
+              <div style={{
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: 'linear-gradient(135deg,#818cf8,#a855f7)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontSize: '11px', fontWeight: 700, flexShrink: 0
+              }}>
+                {(user?.name || user?.email || '?')[0].toUpperCase()}
               </div>
-              <span className="text-sm text-gray-600 max-w-[80px] truncate">
+              <span style={{ fontSize: '13px', color: '#4b5563', maxWidth: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {user?.name || user?.email}
               </span>
               {user?.role === 'admin' && (
-                <span className="text-xs bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded-full font-medium">
+                <span style={{ fontSize: '10px', background: '#f3e8ff', color: '#9333ea', padding: '2px 6px', borderRadius: '10px', fontWeight: 600, flexShrink: 0 }}>
                   管理员
                 </span>
               )}
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 hover:bg-gray-100 rounded-xl transition text-gray-400 hover:text-red-500"
-            >
-              <LogOut size={18} />
+            <button onClick={handleLogout} style={{
+              padding: '7px', background: 'none', border: 'none', cursor: 'pointer',
+              color: '#9ca3af', borderRadius: '10px'
+            }}>
+              <LogOut size={17} />
             </button>
           </div>
         </div>
       </div>
 
       {/* 主内容 */}
-      <div className="max-w-2xl mx-auto">
+      <div>
         {currentPage === 'home'       && <Home />}
         {currentPage === 'budget'     && <Budget />}
         {currentPage === 'analytics'  && <Analytics onBack={() => setCurrentPage('home')} />}
@@ -394,32 +450,37 @@ function App() {
         {currentPage === 'admin'      && <Admin />}
       </div>
 
-      {/* 底部导航 */}
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white border-t border-gray-100 shadow-lg flex">
-            {navItems.map(({ page, icon, label }) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`flex-1 py-3 flex flex-col items-center gap-0.5 transition-all ${
-                  currentPage === page ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'
-                }`}
-              >
-                <div className={`p-1.5 rounded-xl transition-all ${
-                  currentPage === page ? 'bg-indigo-50' : ''
-                }`}>
-                  {icon}
-                </div>
-                <span className={`text-[10px] font-medium ${
-                  currentPage === page ? 'text-indigo-600' : 'text-gray-400'
-                }`}>
-                  {label}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* 底部导航 —— 跟随 #root 宽度 */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: '50%',
+        transform: 'translateX(-50%)',
+        width: '100%', maxWidth: '480px',
+        background: 'white', borderTop: '1px solid #f0f0f0',
+        boxShadow: '0 -2px 12px rgba(0,0,0,0.06)', zIndex: 40,
+        display: 'flex'
+      }}>
+        {navItems.map(({ page, icon, label }) => (
+          <button
+            key={page}
+            onClick={() => setCurrentPage(page)}
+            style={{
+              flex: 1, padding: '8px 0 6px', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', gap: '2px', border: 'none', cursor: 'pointer',
+              background: 'none', transition: 'all 0.15s',
+              color: currentPage === page ? '#6366f1' : '#9ca3af'
+            }}
+          >
+            <div style={{
+              padding: '3px 10px', borderRadius: '10px',
+              background: currentPage === page ? '#eef2ff' : 'transparent',
+            }}>
+              {icon}
+            </div>
+            <span style={{ fontSize: '10px', fontWeight: currentPage === page ? 600 : 400 }}>
+              {label}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* 悬浮记账按钮 */}

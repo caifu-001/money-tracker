@@ -14,7 +14,16 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f9fafb;
+  background-color: #e8eaf6;
+}
+
+#root {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background-color: #f3f4f6;
+  position: relative;
+  box-shadow: 0 0 60px rgba(99, 102, 241, 0.12);
 }
 
 @keyframes slide-up {
@@ -30,11 +39,4 @@ body {
 
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  body {
-    font-size: 14px;
-  }
 }
