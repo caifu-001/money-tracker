@@ -1,0 +1,157 @@
+<!--pages/analytics/analytics.wxml-->
+<view class="page">
+  <!-- 顶部标题 -->
+  <view class="header">
+    <text class="page-title">📊 数据分析</text>
+    <text class="subtitle">{{monthLabel}}</text>
+  </view>
+
+  <!-- 时间选择 -->
+  <view class="time-tabs">
+    <view class="time-tab {{timeRange==='month'?'active':''}}" bindtap="setTime" data-range="month">本月</view>
+    <view class="time-tab {{timeRange==='quarter'?'active':''}}" bindtap="setTime" data-range="quarter">本季</view>
+    <view class="time-tab {{timeRange==='year'?'active':''}}" bindtap="setTime" data-range="year">本年</view>
+  </view>
+
+  <!-- 总览卡片 -->
+  <view class="overview-card">
+    <view class="ov-row">
+      <view class="ov-item">
+        <text class="ov-label">💰 收入</text>
+        <text class="ov-income">+¥{{totalIncome}}</text>
+      </view>
+      <view class="ov-divider"></view>
+      <view class="ov-item">
+        <text class="ov-label">💸 支出</text>
+        <text class="ov-expense">-¥{{totalExpense}}</text>
+      </view>
+    </view>
+    <view class="balance-row">
+      <text class="balance-label">本月结余</text>
+      <text class="balance-value {{balance>=0?'green':'red'}}">{{balance>=0?'+':''}}¥{{balance}}</text>
+    </view>
+  </view>
+
+  <!-- 加载 -->
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+
+  <block wx:else>
+    <!-- 支出分类占比（文字版） -->
+    <view class="card" wx:if="{{expenseBreakdown.length>0}}">
+      <text class="card-title">💸 支出分类</text>
+      <view class="breakdown-list">
+        <view class="bd-item" wx:for="{{expenseBreakdown}}" wx:key="category">
+          <view class="bd-left">
+            <text class="bd-icon">{{item.icon}}</text>
+            <text class="bd-name">{{item.category}}</text>
+            <text class="bd-pct">{{item.percent}}%</text>
+          </view>
+          <view class="bd-right">
+            <view class="bd-bar-wrap">
+              <view class="bd-bar" style="width:{{item.percent}}%;background:{{item.color}}"></view>
+            </view>
+            <text class="bd-amount">¥{{item.amount}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 收入分类占比 -->
+    <view class="card" wx:if="{{incomeBreakdown.length>0}}">
+      <text class="card-title">💰 收入分类</text>
+      <view class="breakdown-list">
+        <view class="bd-item" wx:for="{{incomeBreakdown}}" wx:key="category">
+          <view class="bd-left">
+            <text class="bd-icon">{{item.icon}}</text>
+            <text class="bd-name">{{item.category}}</text>
+            <text class="bd-pct">{{item.percent}}%</text>
+          </view>
+          <view class="bd-right">
+            <view class="bd-bar-wrap">
+              <view class="bd-bar" style="width:{{item.percent}}%;background:#22c55e"></view>
+            </view>
+            <text class="bd-amount green">¥{{item.amount}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 每日趋势 -->
+    <view class="card" wx:if="{{dailyTrend.length>0}}">
+      <text class="card-title">📈 每日支出趋势</text>
+      <view class="trend-chart">
+        <view class="trend-bars">
+          <view class="trend-bar-wrap" wx:for="{{dailyTrend}}" wx:key="date">
+            <view class="trend-bar-col">
+              <view class="trend-bar" style="height:{{item.barHeight}}px;background:{{item.isToday?'#6366f1':'#c7d2fe'}}"></view>
+            </view>
+            <text class="trend-day">{{item.day}}</text>
+            <text class="trend-amount">¥{{item.amount}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 类别快速设预算 -->
+    <view class="card budget-card">
+      <text class="card-title">💳 快速设置预算</text>
+      <text class="card-sub">点击类别快速设置月度预算</text>
+      <view class="budget-quick">
+        <view class="bq-item {{item.hasBudget?'active':''}}" wx:for="{{expenseCats}}" wx:key="name" bindtap="openBudgetSet" data-name="{{item.name}}" data-icon="{{item.icon}}" data-has="{{item.hasBudget}}">
+          <text class="bq-icon">{{item.icon}}</text>
+          <text class="bq-name">{{item.name}}</text>
+          <text class="bq-badge" wx:if="{{item.hasBudget}}">✓</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 预算完成情况 -->
+    <view class="card" wx:if="{{budgetStatus.length>0}}">
+      <text class="card-title">🎯 预算进度</text>
+      <view class="budget-list">
+        <view class="bs-item" wx:for="{{budgetStatus}}" wx:key="category">
+          <view class="bs-header">
+            <text class="bs-icon">{{item.icon}}</text>
+            <text class="bs-name">{{item.category}}</text>
+            <text class="bs-pct {{item.percent>=100?'red':''}}">{{item.percent}}%</text>
+          </view>
+          <view class="bs-bar">
+            <view class="bs-fill {{item.percent>=100?'over':''}}" style="width:{{item.percent>100?100:item.percent}}%"></view>
+          </view>
+          <view class="bs-footer">
+            <text class="bs-spent {{item.percent>=100?'red':''}}">已花 ¥{{item.spent}}</text>
+            <text class="bs-total">预算 ¥{{item.amount}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="empty-final" wx:if="{{totalExpense===0 && totalIncome===0}}">
+      <text class="icon">📊</text>
+      <text class="text">本月暂无数据</text>
+      <text class="sub">开始记账后，这里会显示详细分析</text>
+    </view>
+  </block>
+</view>
+
+<!-- 预算设置弹窗 -->
+<view class="modal-mask" wx:if="{{showBudgetModal}}" bindtap="closeBudgetModal"></view>
+<view class="budget-modal {{showBudgetModal?'show':''}}">
+  <view class="bm-card">
+    <view class="bm-header">
+      <text class="bm-title">💳 设置预算</text>
+      <text class="bm-close" bindtap="closeBudgetModal">✕</text>
+    </view>
+    <view class="bm-body">
+      <text class="bm-cat-icon">{{budgetIcon}}</text>
+      <text class="bm-cat-name">{{budgetCat}}</text>
+      <view class="bm-input-wrap">
+        <text class="bm-yuan">¥</text>
+        <input class="bm-input" type="digit" placeholder="输入月度预算" value="{{budgetAmount}}" bindinput="onBudgetInput" focus="{{showBudgetModal}}"/>
+      </view>
+      <button class="bm-btn" bindtap="handleBudgetSave" disabled="{{!budgetAmount||budgetSaving}}">
+        {{budgetSaving?'保存中...':'✓ 保存预算'}}
+      </button>
+    </view>
+  </view>
+</view>

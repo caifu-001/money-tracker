@@ -1,0 +1,116 @@
+<!--pages/admin/admin.wxml-->
+<view class="page">
+  <!-- 顶部标题 -->
+  <view class="header">
+    <text class="page-title">🛡️ 管理后台</text>
+    <text class="user-info">👤 {{user.name}} ({{user.role}})</text>
+  </view>
+
+  <!-- Tab 切换 -->
+  <view class="tab-bar">
+    <view class="tab {{tab==='users'?'active':''}}" bindtap="setTab" data-tab="users">👥 用户管理</view>
+    <view class="tab {{tab==='ledgers'?'active':''}}" bindtap="setTab" data-tab="ledgers">📚 账本管理</view>
+  </view>
+
+  <!-- 同步按钮（仅用户 Tab） -->
+  <button class="sync-btn" bindtap="handleSync" wx:if="{{tab==='users'}}">
+    🔄 同步用户数据
+  </button>
+
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+
+  <!-- ── 用户列表 ── -->
+  <block wx:if="{{tab==='users' && !loading}}">
+    <view class="section-title">全部用户 ({{users.length}})</view>
+    <view class="user-list">
+      <view class="user-item" wx:for="{{users}}" wx:key="id">
+        <view class="ui-left">
+          <text class="ui-avatar">{{item.name.charAt(0)||'?'}}</text>
+          <view class="ui-info">
+            <text class="ui-name">{{item.name}}</text>
+            <text class="ui-email">{{item.email}}</text>
+          </view>
+        </view>
+        <view class="ui-right">
+          <!-- 状态标签 -->
+          <text class="status-badge {{item.status==='active'?'active':item.status==='pending'?'pending':'disabled'}}">
+            {{item.status==='active'?'已激活':item.status==='pending'?'待审核':'已禁用'}}
+          </text>
+          <!-- 角色 -->
+          <text class="role-badge {{item.role==='admin'?'admin':'user'}}">
+            {{item.role==='admin'?'管理员':'普通用户'}}
+          </text>
+        </view>
+        <view class="ui-actions">
+          <!-- pending 用户 → 审核通过 -->
+          <button class="action-btn approve" wx:if="{{item.status==='pending'}}" bindtap="openApprove" data-id="{{item.id}}" data-name="{{item.name}}">
+            ✅ 审核
+          </button>
+          <!-- active 用户 → 禁用 -->
+          <button class="action-btn disable" wx:if="{{item.status==='active'}}" bindtap="handleDisable" data-id="{{item.id}}" data-name="{{item.name}}">
+            🚫 禁用
+          </button>
+          <!-- disabled 用户 → 启用 -->
+          <button class="action-btn enable" wx:if="{{item.status==='disabled'}}" bindtap="handleApprove" data-id="{{item.id}}" data-name="{{item.name}}">
+            ✅ 启用
+          </button>
+          <!-- 删除（不能删自己） -->
+          <button class="action-btn delete" wx:if="{{item.id!==user.id}}" bindtap="handleDeleteUser" data-id="{{item.id}}" data-name="{{item.name}}">
+            🗑 删除
+          </button>
+        </view>
+      </view>
+      <view class="empty" wx:if="{{users.length===0}}">
+        <text>暂无用户数据</text>
+      </view>
+    </view>
+  </block>
+
+  <!-- ── 账本列表 ── -->
+  <block wx:if="{{tab==='ledgers' && !loading}}">
+    <view class="section-title">全部账本 ({{ledgers.length}})</view>
+    <view class="ledger-list">
+      <view class="ledger-item" wx:for="{{ledgers}}" wx:key="id">
+        <view class="li-top">
+          <text class="li-icon">📖</text>
+          <view class="li-info">
+            <text class="li-name">{{item.name}}</text>
+            <text class="li-owner">创建者: {{item.owner ? item.owner.name : '未知'}}</text>
+          </view>
+          <text class="li-del" bindtap="handleDeleteLedger" data-id="{{item.id}}" data-name="{{item.name}}">🗑</text>
+        </view>
+        <view class="li-members" bindtap="showLedgerMembers" data-id="{{item.id}}">
+          <text>👥 查看成员</text>
+        </view>
+      </view>
+      <view class="empty" wx:if="{{ledgers.length===0}}">
+        <text>暂无账本</text>
+      </view>
+    </view>
+  </block>
+</view>
+
+<!-- 审核弹窗 -->
+<view class="modal-mask" wx:if="{{showApprove}}" bindtap="closeApprove"></view>
+<view class="modal {{showApprove?'show':''}}">
+  <view class="modal-card">
+    <view class="modal-header">
+      <text class="modal-title">审核用户</text>
+      <text class="modal-close" bindtap="closeApprove">✕</text>
+    </view>
+    <view class="modal-body">
+      <text class="modal-label">将为「{{approveName}}」分配权限：</text>
+      <radio-group bindchange="onRoleChange">
+        <label class="radio-item">
+          <radio value="user" checked="{{approveRole==='user'}}"/>
+          <text>普通用户</text>
+        </label>
+        <label class="radio-item">
+          <radio value="admin" checked="{{approveRole==='admin'}}"/>
+          <text>管理员</text>
+        </label>
+      </radio-group>
+      <button class="modal-btn" bindtap="handleApprove">确认通过</button>
+    </view>
+  </view>
+</view>

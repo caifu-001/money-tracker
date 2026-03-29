@@ -1,0 +1,176 @@
+<!--pages/categories/categories.wxml-->
+<view class="page">
+  <!-- 标题 + 新增按钮 -->
+  <view class="page-header">
+    <text class="page-title">📂 类别管理</text>
+    <view class="add-btn" bindtap="toggleForm">
+      <text>+ 新增类别</text>
+    </view>
+  </view>
+
+  <!-- 新增顶级类别表单 -->
+  <view class="form-card" wx:if="{{showForm}}">
+    <text class="form-title">新增顶级类别</text>
+    <view class="type-tabs">
+      <view class="type-tab {{formType==='expense'?'active-expense':''}}" bindtap="setFormType" data-type="expense">💸 支出</view>
+      <view class="type-tab {{formType==='income'?'active-income':''}}"  bindtap="setFormType" data-type="income">💰 收入</view>
+    </view>
+    <view class="icon-name-row">
+      <input class="icon-input" value="{{formIcon}}" bindinput="onFormIconInput" maxlength="2"/>
+      <input class="name-input" placeholder="类别名称" value="{{formName}}" bindinput="onFormNameInput"/>
+    </view>
+    <view class="btn-row">
+      <button class="btn-confirm" bindtap="handleAddTop">添加</button>
+      <button class="btn-cancel"  bindtap="toggleForm">取消</button>
+    </view>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+
+  <block wx:else>
+    <!-- 支出类别 -->
+    <view class="section">
+      <text class="section-title expense-color">支出类别</text>
+
+      <!-- 预置类别（从 system_config 读取） -->
+      <text class="sub-title">预置类别</text>
+      <view class="preset-grid">
+        <view class="preset-item" wx:for="{{expensePresets}}" wx:key="name">
+          <text class="preset-icon">{{item.icon}}</text>
+          <text class="preset-name">{{item.name}}</text>
+        </view>
+      </view>
+
+      <!-- 自定义类别 -->
+      <text class="sub-title">自定义类别</text>
+      <view wx:if="{{expenseCats.length===0}}" class="empty-custom">暂无自定义类别</view>
+      <view wx:else>
+        <block wx:for="{{expenseCats}}" wx:key="id">
+          <view class="cat-row {{inlineParentId===item.id?'highlighted':''}} {{editId===item.id?'editing':''}}">
+            <!-- 展开箭头 -->
+            <view class="expand-btn" wx:if="{{item.children&&item.children.length>0}}" bindtap="toggleExpand" data-id="{{item.id}}">
+              <text>{{expandedIds.includes(item.id)?'▾':'▸'}}</text>
+            </view>
+            <view class="expand-placeholder" wx:else></view>
+
+            <!-- 编辑模式 -->
+            <block wx:if="{{editId===item.id}}">
+              <input class="edit-icon-input" value="{{editIcon}}" bindinput="onEditIconInput" maxlength="2"/>
+              <input class="edit-name-input" value="{{editName}}" bindinput="onEditNameInput" focus="true"/>
+              <text class="action-confirm" bindtap="handleEdit">✓</text>
+              <text class="action-cancel"  bindtap="closeEdit">✕</text>
+            </block>
+
+            <!-- 显示模式 -->
+            <block wx:else>
+              <text class="cat-icon">{{item.icon}}</text>
+              <view class="cat-info">
+                <text class="cat-name">{{item.name}}</text>
+                <text class="cat-meta">第{{item.level}}级{{item.children&&item.children.length?' · '+item.children.length+'个子类别':''}}</text>
+              </view>
+              <view class="cat-actions">
+                <text class="action-edit" bindtap="openEdit" data-id="{{item.id}}" data-name="{{item.name}}" data-icon="{{item.icon}}">✏️</text>
+                <text class="action-add"  bindtap="openInlineForm" data-id="{{item.id}}" data-name="{{item.name}}" wx:if="{{item.level<5}}">+子</text>
+                <text class="action-del"  bindtap="onDeleteTap" data-id="{{item.id}}">🗑</text>
+              </view>
+            </block>
+          </view>
+
+          <!-- 内联添加子类别 -->
+          <view class="inline-form" wx:if="{{inlineParentId===item.id}}">
+            <text class="inline-title">➕ 添加「{{inlineParentName}}」的子类别</text>
+            <view class="icon-name-row">
+              <input class="icon-input" value="{{inlineIcon}}" bindinput="onInlineIconInput" maxlength="2"/>
+              <input class="name-input" placeholder="子类别名称" value="{{inlineName}}" bindinput="onInlineNameInput" focus="true"/>
+            </view>
+            <view class="btn-row">
+              <button class="btn-confirm" bindtap="handleAddChild">确认添加</button>
+              <button class="btn-cancel"  bindtap="closeInlineForm">取消</button>
+            </view>
+          </view>
+
+          <!-- 子类别列表 -->
+          <view wx:if="{{expandedIds.includes(item.id)&&item.children&&item.children.length>0}}">
+            <view class="cat-row child-row" wx:for="{{item.children}}" wx:key="id" wx:for-item="child">
+              <view class="expand-placeholder child-indent"></view>
+              <text class="cat-icon">{{child.icon}}</text>
+              <view class="cat-info">
+                <text class="cat-name">{{child.name}}</text>
+                <text class="cat-meta">第{{child.level}}级</text>
+              </view>
+              <view class="cat-actions">
+                <text class="action-del" bindtap="onDeleteTap" data-id="{{child.id}}">🗑</text>
+              </view>
+            </view>
+          </view>
+        </block>
+      </view>
+    </view>
+
+    <!-- 收入类别（结构相同） -->
+    <view class="section">
+      <text class="section-title income-color">收入类别</text>
+      <text class="sub-title">预置类别</text>
+      <view class="preset-grid">
+        <view class="preset-item" wx:for="{{incomePresets}}" wx:key="name">
+          <text class="preset-icon">{{item.icon}}</text>
+          <text class="preset-name">{{item.name}}</text>
+        </view>
+      </view>
+      <text class="sub-title">自定义类别</text>
+      <view wx:if="{{incomeCats.length===0}}" class="empty-custom">暂无自定义类别</view>
+      <view wx:else>
+        <block wx:for="{{incomeCats}}" wx:key="id">
+          <view class="cat-row {{inlineParentId===item.id?'highlighted':''}} {{editId===item.id?'editing':''}}">
+            <view class="expand-btn" wx:if="{{item.children&&item.children.length>0}}" bindtap="toggleExpand" data-id="{{item.id}}">
+              <text>{{expandedIds.includes(item.id)?'▾':'▸'}}</text>
+            </view>
+            <view class="expand-placeholder" wx:else></view>
+            <block wx:if="{{editId===item.id}}">
+              <input class="edit-icon-input" value="{{editIcon}}" bindinput="onEditIconInput" maxlength="2"/>
+              <input class="edit-name-input" value="{{editName}}" bindinput="onEditNameInput" focus="true"/>
+              <text class="action-confirm" bindtap="handleEdit">✓</text>
+              <text class="action-cancel"  bindtap="closeEdit">✕</text>
+            </block>
+            <block wx:else>
+              <text class="cat-icon">{{item.icon}}</text>
+              <view class="cat-info">
+                <text class="cat-name">{{item.name}}</text>
+                <text class="cat-meta">第{{item.level}}级{{item.children&&item.children.length?' · '+item.children.length+'个子类别':''}}</text>
+              </view>
+              <view class="cat-actions">
+                <text class="action-edit" bindtap="openEdit" data-id="{{item.id}}" data-name="{{item.name}}" data-icon="{{item.icon}}">✏️</text>
+                <text class="action-add"  bindtap="openInlineForm" data-id="{{item.id}}" data-name="{{item.name}}" wx:if="{{item.level<5}}">+子</text>
+                <text class="action-del"  bindtap="onDeleteTap" data-id="{{item.id}}">🗑</text>
+              </view>
+            </block>
+          </view>
+          <view class="inline-form" wx:if="{{inlineParentId===item.id}}">
+            <text class="inline-title">➕ 添加「{{inlineParentName}}」的子类别</text>
+            <view class="icon-name-row">
+              <input class="icon-input" value="{{inlineIcon}}" bindinput="onInlineIconInput" maxlength="2"/>
+              <input class="name-input" placeholder="子类别名称" value="{{inlineName}}" bindinput="onInlineNameInput" focus="true"/>
+            </view>
+            <view class="btn-row">
+              <button class="btn-confirm" bindtap="handleAddChild">确认添加</button>
+              <button class="btn-cancel"  bindtap="closeInlineForm">取消</button>
+            </view>
+          </view>
+          <view wx:if="{{expandedIds.includes(item.id)&&item.children&&item.children.length>0}}">
+            <view class="cat-row child-row" wx:for="{{item.children}}" wx:key="id" wx:for-item="child">
+              <view class="expand-placeholder child-indent"></view>
+              <text class="cat-icon">{{child.icon}}</text>
+              <view class="cat-info">
+                <text class="cat-name">{{child.name}}</text>
+                <text class="cat-meta">第{{child.level}}级</text>
+              </view>
+              <view class="cat-actions">
+                <text class="action-del" bindtap="onDeleteTap" data-id="{{child.id}}">🗑</text>
+              </view>
+            </view>
+          </view>
+        </block>
+      </view>
+    </view>
+  </block>
+</view>

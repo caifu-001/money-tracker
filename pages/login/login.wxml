@@ -1,0 +1,73 @@
+<!--pages/login/login.wxml-->
+<view class="container">
+  <!-- 背景装饰 -->
+  <view class="bg-circle bg-circle-1"></view>
+  <view class="bg-circle bg-circle-2"></view>
+
+  <!-- Logo 区域 -->
+  <view class="logo-area">
+    <image class="logo-img" src="/assets/icons/logo.png" mode="aspectFit"/>
+    <text class="logo-name">{{appName}}</text>
+    <text class="logo-sub">智能记账，轻松理财</text>
+  </view>
+
+  <!-- 登录/注册表单 -->
+  <view class="form-card">
+    <!-- 模式切换 -->
+    <view class="mode-tabs" wx:if="{{mode !== 'forgot'}}">
+      <view class="mode-tab {{mode==='login'?'active':''}}" bindtap="switchMode" data-mode="login">登录</view>
+      <view class="mode-tab {{mode==='signup'?'active':''}}" bindtap="switchMode" data-mode="signup">注册</view>
+    </view>
+
+    <!-- 登录表单 -->
+    <block wx:if="{{mode==='login'}}">
+      <view class="input-group">
+        <text class="input-label">用户名 / 邮箱</text>
+        <input class="input-field" placeholder="请输入用户名或邮箱" value="{{loginId}}" bindinput="onLoginIdInput" confirm-type="next"/>
+      </view>
+      <view class="input-group">
+        <text class="input-label">密码</text>
+        <view class="password-wrap">
+          <input class="input-field" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" password="{{!showPwd}}" confirm-type="done" bindconfirm="handleLogin"/>
+          <text class="pwd-toggle" bindtap="togglePwd">{{showPwd?'🙈':'👁'}}</text>
+        </view>
+      </view>
+      <view class="forgot-link" bindtap="switchMode" data-mode="forgot">忘记密码？</view>
+      <button class="btn-submit {{loading?'disabled':''}}" bindtap="handleLogin" disabled="{{loading}}">
+        {{loading ? '登录中...' : '登 录'}}
+      </button>
+    </block>
+
+    <!-- 注册表单 -->
+    <block wx:if="{{mode==='signup'}}">
+      <view class="input-group">
+        <text class="input-label">用户名</text>
+        <input class="input-field" placeholder="设置用户名（字母/数字）" value="{{username}}" bindinput="onUsernameInput" confirm-type="next"/>
+      </view>
+      <view class="input-group">
+        <text class="input-label">密码</text>
+        <view class="password-wrap">
+          <input class="input-field" placeholder="至少6位密码" value="{{password}}" bindinput="onPasswordInput" password="{{!showPwd}}" confirm-type="done"/>
+          <text class="pwd-toggle" bindtap="togglePwd">{{showPwd?'🙈':'👁'}}</text>
+        </view>
+      </view>
+      <button class="btn-submit {{loading?'disabled':''}}" bindtap="handleSignup" disabled="{{loading}}">
+        {{loading ? '注册中...' : '注 册'}}
+      </button>
+    </block>
+
+    <!-- 忘记密码 -->
+    <block wx:if="{{mode==='forgot'}}">
+      <view class="back-btn" bindtap="switchMode" data-mode="login">← 返回登录</view>
+      <view class="input-group">
+        <text class="input-label">注册邮箱</text>
+        <input class="input-field" placeholder="请输入注册时的邮箱" value="{{email}}" bindinput="onEmailInput" confirm-type="done"/>
+      </view>
+      <button class="btn-submit" bindtap="handleForgot" disabled="{{loading}}">
+        {{loading ? '发送中...' : '发送重置邮件'}}
+      </button>
+    </block>
+  </view>
+
+  <text class="footer-text">{{appName}} · 智能记账</text>
+</view>

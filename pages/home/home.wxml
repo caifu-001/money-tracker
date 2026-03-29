@@ -1,0 +1,219 @@
+<!--pages/home/home.wxml-->
+<view class="page">
+  <!-- 顶部渐变统计区 -->
+  <view class="header-gradient">
+    <view class="bg-deco bg-deco-1"></view>
+    <view class="bg-deco bg-deco-2"></view>
+
+    <view class="header-top">
+      <view>
+        <text class="ledger-name">📖 {{currentLedger.name || '暂无账本'}}</text>
+        <text class="month-label">{{monthLabel}}</text>
+      </view>
+      <view class="header-right">
+        <view class="header-btn" bindtap="goSettings"><text>⚙️</text></view>
+        <view class="header-btn" bindtap="goFamily"><text>👥</text></view>
+        <view class="header-btn admin-btn" bindtap="goAdmin" wx:if="{{user.role==='admin'}}"><text>🛡️</text></view>
+      </view>
+    </view>
+
+    <view class="balance-area">
+      <text class="balance-label">本月结余</text>
+      <text class="balance-amount">¥{{balance}}</text>
+    </view>
+
+    <view class="stat-row">
+      <view class="stat-card">
+        <text class="stat-label">💚 收入</text>
+        <text class="stat-value income">¥{{totalIncome}}</text>
+      </view>
+      <view class="stat-card">
+        <text class="stat-label">❤️ 支出</text>
+        <text class="stat-value expense">¥{{totalExpense}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 账目列表 -->
+  <view class="list-card">
+    <view class="list-header">
+      <text class="list-title">本月账目</text>
+      <text class="list-count">共 {{transactions.length}} 条</text>
+    </view>
+
+    <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+
+    <view class="empty-state" wx:elif="{{transactions.length===0}}">
+      <text class="icon">📝</text>
+      <text class="text">本月暂无账目</text>
+      <text class="sub">点击右下角 + 开始记账</text>
+    </view>
+
+    <view wx:else>
+      <view class="tx-item" wx:for="{{transactions}}" wx:key="id" bindtap="onEditTap" data-index="{{index}}">
+        <view class="tx-icon {{item.type==='income'?'income':'expense'}}">
+          <text>{{item.categoryIcon}}</text>
+        </view>
+        <view class="tx-info">
+          <text class="tx-cat">{{item.category}}</text>
+          <text class="tx-date">{{item.dateLabel}}{{item.note?' · '+item.note:''}}{{item.paymentDisplay!=='现金'?' · '+item.paymentDisplay:''}}</text>
+        </view>
+        <view class="tx-right">
+          <text class="tx-amount {{item.type==='income'?'income':'expense'}}">
+            {{item.type==='income'?'+':'-'}}¥{{item.amountStr}}
+          </text>
+          <view class="tx-actions" wx:if="{{item.canEdit}}">
+            <text class="action-edit" catchtap="onEditTap" data-index="{{index}}">✏️</text>
+            <text class="action-del" catchtap="onDeleteTap" data-id="{{item.id}}">🗑</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 悬浮记账按钮 -->
+  <view class="float-btn" bindtap="openQuickAdd">
+    <text class="float-icon">+</text>
+  </view>
+
+  <!-- ══════════════════════════════════ -->
+  <!-- 记账弹窗 -->
+  <!-- ══════════════════════════════════ -->
+  <view class="modal-mask" wx:if="{{showQuickAdd}}" bindtap="closeQuickAdd"></view>
+  <view class="quick-add-panel {{showQuickAdd?'show':''}}">
+    <view class="panel-drag"></view>
+    <view class="panel-content">
+      <view class="panel-header">
+        <text class="panel-title">记一笔</text>
+        <text class="panel-close" bindtap="closeQuickAdd">✕</text>
+      </view>
+
+      <!-- 收支切换 -->
+      <view class="type-tabs">
+        <view class="type-tab {{qaType==='expense'?'active-expense':''}}" bindtap="setQaType" data-type="expense">💸 支出</view>
+        <view class="type-tab {{qaType==='income'?'active-income':''}}" bindtap="setQaType" data-type="income">💰 收入</view>
+      </view>
+
+      <!-- 金额 -->
+      <view class="amount-area {{qaType==='expense'?'expense-bg':'income-bg'}}">
+        <text class="amount-label">金额（元）</text>
+        <view class="amount-row">
+          <text class="amount-symbol {{qaType==='expense'?'red':'green'}}">¥</text>
+          <input class="amount-input" type="digit" placeholder="0.00" value="{{qaAmount}}" bindinput="onAmountInput" focus="{{showQuickAdd}}"/>
+        </view>
+      </view>
+
+      <!-- 分类 -->
+      <view class="cat-section">
+        <view class="cat-header">
+          <text class="cat-title">选择分类</text>
+          <text class="cat-selected" wx:if="{{qaCategory}}">已选：{{qaCategory}}</text>
+        </view>
+        <view class="cat-grid">
+          <view class="cat-item {{qaCategory===item.name||qaExpandedKey===item.name?'selected':''}}"
+            wx:for="{{currentCats}}" wx:key="name"
+            bindtap="onCatTap" data-name="{{item.name}}" data-has-children="{{item.hasChildren}}">
+            <text class="cat-icon">{{item.icon}}</text>
+            <text class="cat-name">{{item.name}}</text>
+            <text class="cat-arrow" wx:if="{{item.hasChildren}}">{{qaExpandedKey===item.name?'▾':'▸'}}</text>
+          </view>
+        </view>
+        <!-- 子类展开 -->
+        <view class="sub-panel" wx:if="{{qaExpandedKey && subCats.length>0}}">
+          <view class="sub-header">
+            <text>{{qaExpandedKey}} 的子类别</text>
+            <text class="sub-self" bindtap="selectParentSelf">选「{{qaExpandedKey}}」本身</text>
+          </view>
+          <view class="cat-grid">
+            <view class="cat-item {{qaCategory===item.name?'selected':''}}"
+              wx:for="{{subCats}}" wx:key="name"
+              bindtap="onSubCatTap" data-name="{{item.name}}">
+              <text class="cat-icon">{{item.icon}}</text>
+              <text class="cat-name">{{item.name}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 备注 -->
+      <input class="note-input" placeholder="✏️ 添加备注（可选）" value="{{qaNote}}" bindinput="onNoteInput"/>
+
+      <!-- 支付方式 -->
+      <view class="payment-section">
+        <text class="payment-title">支付方式</text>
+        <view class="payment-row">
+          <view class="pay-item {{qaPaymentMethod===item.id?'selected':''}}"
+            wx:for="{{[{id:'cash',name:'现金',icon:'💵'},{id:'wechat',name:'微信',icon:'💚'},{id:'alipay',name:'支付宝',icon:'💙'},{id:'bankcard',name:'银行卡',icon:'💳'}]}}"
+            wx:key="id" bindtap="onQaPaymentChange" data-id="{{item.id}}">
+            <text class="pay-icon">{{item.icon}}</text>
+            <text class="pay-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 提交 -->
+      <button class="submit-btn {{qaType==='expense'?'expense-btn':'income-btn'}}"
+        bindtap="handleQuickAdd" disabled="{{qaLoading||!qaAmount||!qaCategory}}">
+        {{qaLoading?'记账中...':'✓ 确认记账'}}
+      </button>
+    </view>
+  </view>
+
+  <!-- ══════════════════════════════════ -->
+  <!-- 编辑弹窗 -->
+  <!-- ══════════════════════════════════ -->
+  <view class="modal-mask" wx:if="{{showEdit}}" bindtap="closeEdit"></view>
+  <view class="quick-add-panel {{showEdit?'show':''}}">
+    <view class="panel-drag"></view>
+    <view class="panel-content">
+      <view class="panel-header">
+        <text class="panel-title">✏️ 修改账目</text>
+        <text class="panel-close" bindtap="closeEdit">✕</text>
+      </view>
+      <view class="type-tabs">
+        <view class="type-tab {{editType==='expense'?'active-expense':''}}" bindtap="setEditType" data-type="expense">💸 支出</view>
+        <view class="type-tab {{editType==='income'?'active-income':''}}" bindtap="setEditType" data-type="income">💰 收入</view>
+      </view>
+      <view class="amount-area {{editType==='expense'?'expense-bg':'income-bg'}}">
+        <text class="amount-label">金额（元）</text>
+        <view class="amount-row">
+          <text class="amount-symbol {{editType==='expense'?'red':'green'}}">¥</text>
+          <input class="amount-input" type="digit" value="{{editAmount}}" bindinput="onEditAmountInput"/>
+        </view>
+      </view>
+      <view style="margin:16rpx 0">
+        <text style="font-size:24rpx;color:#6b7280;display:block;margin-bottom:8rpx">日期</text>
+        <picker mode="date" value="{{editDate}}" bindchange="onEditDateChange">
+          <view style="background:#f9fafb;border:3rpx solid #e5e7eb;border-radius:20rpx;padding:20rpx 24rpx;font-size:28rpx;color:#1f2937">{{editDate}} ▾</view>
+        </picker>
+      </view>
+      <view class="cat-section">
+        <view class="cat-header"><text class="cat-title">选择分类</text></view>
+        <view class="cat-grid">
+          <view class="cat-item {{editCategory===item.name?'selected':''}}"
+            wx:for="{{editCats}}" wx:key="name"
+            bindtap="onEditCatTap" data-name="{{item.name}}">
+            <text class="cat-icon">{{item.icon}}</text>
+            <text class="cat-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+      <input class="note-input" placeholder="✏️ 备注" value="{{editNote}}" bindinput="onEditNoteInput"/>
+      <!-- 支付方式 -->
+      <view class="payment-section">
+        <text class="payment-title">支付方式</text>
+        <view class="payment-row">
+          <view class="pay-item {{editPaymentMethod===item.id?'selected':''}}"
+            wx:for="{{[{id:'cash',name:'现金',icon:'💵'},{id:'wechat',name:'微信',icon:'💚'},{id:'alipay',name:'支付宝',icon:'💙'},{id:'bankcard',name:'银行卡',icon:'💳'}]}}"
+            wx:key="id" bindtap="onEditPaymentChange" data-id="{{item.id}}">
+            <text class="pay-icon">{{item.icon}}</text>
+            <text class="pay-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+      <button class="submit-btn {{editType==='expense'?'expense-btn':'income-btn'}}" bindtap="handleEdit">
+        {{editLoading?'保存中...':'✓ 保存修改'}}
+      </button>
+    </view>
+  </view>
+</view>

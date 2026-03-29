@@ -1,0 +1,16 @@
+<!--pages/family/family.wxml-->
+<view class="page">
+  <view class="header">
+    <text class="title">👨‍👩‍👧 成员管理</text>
+    <text class="desc">邀请成员协同记账</text>
+  </view>
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+  <view class="content" wx:else>
+    <!-- TODO: 完整功能开发中 -->
+    <view class="placeholder">
+      <text class="ph-icon">👥</text>
+      <text class="ph-text">👨‍👩‍👧 成员管理</text>
+      <text class="ph-sub">功能完整实现中，敬请期待</text>
+    </view>
+  </view>
+</view>

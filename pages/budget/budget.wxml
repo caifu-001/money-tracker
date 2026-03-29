@@ -1,0 +1,90 @@
+<!--pages/budget/budget.wxml-->
+<view class="page">
+  <!-- 顶部 -->
+  <view class="header">
+    <text class="page-title">💰 预算管理</text>
+    <text class="month-label">{{monthLabel}}</text>
+  </view>
+
+  <!-- 总览卡片 -->
+  <view class="overview-card">
+    <view class="ov-row">
+      <view class="ov-item">
+        <text class="ov-label">总预算</text>
+        <text class="ov-value purple">¥{{totalBudget}}</text>
+      </view>
+      <view class="ov-item">
+        <text class="ov-label">已支出</text>
+        <text class="ov-value red">¥{{totalSpent}}</text>
+      </view>
+      <view class="ov-item">
+        <text class="ov-label">剩余</text>
+        <text class="ov-value {{totalRemaining>=0?'green':'red'}}">¥{{totalRemaining}}</text>
+      </view>
+    </view>
+    <view class="progress-wrap">
+      <view class="progress-bar">
+        <view class="progress-fill {{overallPercent>=100?'over':''}}" style="width:{{overallPercent>100?100:overallPercent}}%"></view>
+      </view>
+      <text class="progress-text">已使用 {{overallPercent}}%</text>
+    </view>
+  </view>
+
+  <!-- 提示 -->
+  <view class="tip-banner">
+    <text>💡 点击任意类别即可设置/修改月度预算</text>
+  </view>
+
+  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+
+  <!-- 预算列表 -->
+  <block wx:else>
+    <view class="section-title">支出类别预算</view>
+    <view class="cat-list">
+      <view class="cat-item {{item.amount>0?'has-budget':''}}" wx:for="{{catList}}" wx:key="category" bindtap="openEdit" data-cat="{{item.category}}" data-icon="{{item.icon}}" data-amount="{{item.amount}}">
+        <view class="ci-left">
+          <text class="ci-icon">{{item.icon}}</text>
+          <view class="ci-info">
+            <text class="ci-name">{{item.category}}</text>
+            <text class="ci-meta" wx:if="{{item.amount>0}}">已花 ¥{{item.spent}} / 预算 ¥{{item.amount}}</text>
+            <text class="ci-meta gray" wx:else>点击设置预算</text>
+          </view>
+        </view>
+        <view class="ci-right">
+          <block wx:if="{{item.amount>0}}">
+            <view class="ci-bar-wrap">
+              <view class="ci-bar {{item.percent>=100?'over':''}}" style="width:{{item.percent>100?100:item.percent}}%"></view>
+            </view>
+            <text class="ci-pct {{item.percent>=100?'red':''}}">{{item.percent}}%</text>
+          </block>
+          <text class="ci-set-btn">{{item.amount>0?'✏️':'➕'}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>
+
+<!-- 预算设置弹窗 -->
+<view class="modal-mask" wx:if="{{showEditModal}}" bindtap="closeEditModal"></view>
+<view class="edit-modal {{showEditModal?'show':''}}">
+  <view class="em-card">
+    <view class="em-header">
+      <text class="em-title">💳 设置预算</text>
+      <text class="em-close" bindtap="closeEditModal">✕</text>
+    </view>
+    <view class="em-body">
+      <text class="em-cat-icon">{{editCatIcon}}</text>
+      <text class="em-cat-name">{{editCatName}}</text>
+      <view class="em-input-wrap">
+        <text class="em-yuan">¥</text>
+        <input class="em-input" type="digit" placeholder="输入月度预算（留空删除预算）" value="{{editAmount}}" bindinput="onAmountInput" focus="{{showEditModal}}"/>
+      </view>
+      <view class="em-btns">
+        <button class="em-btn-save" bindtap="handleSave" disabled="{{saving}}">
+          {{saving?'保存中...':'✓ 保存'}}
+        </button>
+        <button class="em-btn-cancel" bindtap="closeEditModal">取消</button>
+      </view>
+    </view>
+  </view>
+</view>
