@@ -8,22 +8,24 @@ import { Ledgers } from './pages/Ledgers'
 import { Admin } from './pages/Admin'
 import { Analytics } from './pages/Analytics'
 import { Categories } from './pages/Categories'
+import { FamilyLedger } from './pages/FamilyLedger'
 import { QuickAdd } from './components/QuickAdd'
 import { FloatButton } from './components/FloatButton'
 import { Captcha } from './components/Captcha'
 import {
   Home as HomeIcon, Wallet, TrendingUp, BookOpen,
-  Settings, LogOut, Layers, Eye, EyeOff
+  Settings, LogOut, Layers, Eye, EyeOff, Users, UsersRound
 } from 'lucide-react'
 
-type AuthMode = 'login' | 'signup' | 'forgot' | 'reset'
-type Page = 'home' | 'budget' | 'analytics' | 'categories' | 'ledgers' | 'admin'
+type AuthMode = 'login' | 'signup' | 'forgot' | 'reset' | 'verify'
+type Page = 'home' | 'budget' | 'analytics' | 'categories' | 'ledgers' | 'admin' | 'family'
 
 async function fetchUserAndLedger(
   currentUser: any,
   setUser: (u: any) => void,
   setCurrentLedger: (l: any) => void
 ) {
+  // 查询用户在 users 表的角色
   let userRole: 'admin' | 'user' = 'user'
   try {
     const { data: userData } = await supabase
@@ -57,23 +59,33 @@ async function fetchUserAndLedger(
     })
   }
 
-  try {
-    let query = supabase
-      .from('ledgers')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (userRole !== 'admin') {
-      query = query.eq('owner_id', currentUser.id)
+  // 查询该用户的账本（强制按 owner_id 过滤）
+  const savedLedgerId = localStorage.getItem('qianji_default_ledger_id')
+  const savedLedgerOwner = localStorage.getItem('qianji_default_ledger_owner')
+
+  const { data } = await supabase
+    .from('ledgers')
+    .select('*')
+    .eq('owner_id', currentUser.id)
+    .order('created_at', { ascending: false })
+
+  if (data && data.length > 0) {
+    // 优先恢复用户之前设为默认的账本（仅当该账本仍属于用户时才恢复）
+    if (savedLedgerId && savedLedgerOwner === currentUser.id) {
+      const saved = data.find((l: any) => l.id === savedLedgerId)
+      if (saved) { setCurrentLedger(saved); return }
     }
-    const { data } = await query.limit(1)
-    if (data && data.length > 0) setCurrentLedger(data[0])
-  } catch {}
+    // 否则用列表第一个
+    setCurrentLedger(data[0])
+  } else {
+    // 该用户没有任何账本，清空当前账本
+    setCurrentLedger(null)
+  }
 }
 
 function App() {
   const { user, setUser, setCurrentLedger } = useAppStore()
   const [currentPage, setCurrentPage] = useState<Page>('home')
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false)
   const [isAuthPage, setIsAuthPage] = useState(true)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [loginId, setLoginId] = useState('')
@@ -85,11 +97,17 @@ function App() {
   const [showPassword, setShowPassword] = useState(false)
   const [resetSent, setResetSent] = useState(false)
   const [resetSuccess, setResetSuccess] = useState(false)
+  const [verifyEmail, setVerifyEmail] = useState('')
+  const [verifyCode, setVerifyCode] = useState('')
   // 验证码 & 安全
   const [captchaValid, setCaptchaValid] = useState(false)
   const [captchaKey, setCaptchaKey] = useState(0)   // 用于强制刷新验证码
   const [failCount, setFailCount] = useState(0)
   const [lockUntil, setLockUntil] = useState<number | null>(null)
+  // 新用户创建账本
+  const [showCreateLedger, setShowCreateLedger] = useState(false)
+  const [newLedgerName, setNewLedgerName] = useState('')
+  const [creatingLedger, setCreatingLedger] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -134,9 +152,9 @@ function App() {
     // 检查锁定
     if (lockUntil && Date.now() < lockUntil) return
 
-    // 登录/注册必须通过验证码
-    if ((authMode === 'login' || authMode === 'signup') && !captchaValid) {
-      alert('请先完成验证码')
+    // 登录必须通过验证码（注册走邮箱验证码流程，不需要图形验证）
+    if (authMode === 'login' && !captchaValid) {
+      alert('请先完成验证')
       return
     }
 
@@ -156,16 +174,58 @@ function App() {
           setResetSuccess(false)
         }, 2000)
       } else if (authMode === 'signup') {
-        const { error } = await authService.signUp(loginId || email, password, name)
-        if (error) throw error
-        alert('注册成功！请等待管理员审核后登录')
-        setAuthMode('login')
+        // 邮箱验证注册流程
+        const emailVal = loginId
+        if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) throw new Error('请输入有效的邮箱地址')
+        if (!password || password.length < 6) throw new Error('密码至少6位')
+        if (!name || name.length < 2) throw new Error('请输入用户名（至少2个字符）')
+        // 注册不需要图形验证码，直接发送邮箱验证码
+        const result: any = await authService.sendOtp(emailVal, name, password)
+        if (result.error) throw new Error(result.error)
+        // 开发模式显示验证码
+        if (result.code) alert('验证码(开发模式): ' + result.code)
+        setVerifyEmail(emailVal)
+        setAuthMode('verify')
         setCaptchaKey(k => k + 1)
         setCaptchaValid(false)
+        return
+      } else if (authMode === 'verify') {
+        // 验证OTP并完成注册
+        if (!verifyCode || verifyCode.length < 6) throw new Error('请输入6位验证码')
+        const result: any = await authService.verifyOtp(verifyEmail, verifyCode)
+        if (result.error) throw new Error(result.error)
+        
+        // 注册成功，自动登录
+        const { error: signInError } = await authService.signIn(verifyEmail, password)
+        if (signInError) throw new Error('注册成功但自动登录失败，请手动登录')
+        
+        const currentUser = await authService.getCurrentUser()
+        if (currentUser) {
+          await fetchUserAndLedger(currentUser, setUser, setCurrentLedger)
+          // 检查是否有账本，如果没有则显示创建账本弹窗
+          const { data: ledgers } = await supabase.from('ledgers').select('*').eq('owner_id', currentUser.id)
+          if (!ledgers || ledgers.length === 0) {
+            // 新用户，显示创建账本弹窗
+            setShowCreateLedger(true)
+            setNewLedgerName('')
+          } else {
+            setIsAuthPage(false)
+          }
+        }
+        setAuthMode('login')
+        setLoginId(''); setPassword(''); setName(''); setVerifyCode(''); setVerifyEmail('')
+        setCaptchaKey(k => k + 1)
+        setCaptchaValid(false)
+        return
       } else {
         // 登录
         const { error } = await authService.signIn(loginId || email, password)
         if (error) {
+          // 如果是审核/禁用相关错误，直接显示，不计入失败次数
+          const msg = error.message || ''
+          if (msg.includes('审核') || msg.includes('禁用')) {
+            throw new Error(msg)
+          }
           // 登录失败，增加失败次数
           const newFail = failCount + 1
           setFailCount(newFail)
@@ -183,6 +243,16 @@ function App() {
         setFailCount(0)
         const currentUser = await authService.getCurrentUser()
         if (currentUser) {
+          // 再次检查用户状态，防止绕过
+          const { data: userData } = await supabase.from('users').select('status').eq('id', currentUser.id).single()
+          if (userData?.status === 'pending') {
+            await authService.signOut()
+            throw new Error('账号正在等待管理员审核，请耐心等待')
+          }
+          if (userData?.status === 'disabled') {
+            await authService.signOut()
+            throw new Error('账号已被禁用，请联系管理员')
+          }
           await fetchUserAndLedger(currentUser, setUser, setCurrentLedger)
           setIsAuthPage(false)
         }
@@ -207,7 +277,36 @@ function App() {
     setCaptchaKey(k => k + 1)
     setCaptchaValid(false)
     setFailCount(0)
-    setLockUntil(null)
+  }
+
+  // 创建账本
+  const handleCreateLedger = async () => {
+    if (!newLedgerName.trim()) {
+      alert('请输入账本名称')
+      return
+    }
+    setCreatingLedger(true)
+    try {
+      const currentUser = await authService.getCurrentUser()
+      if (!currentUser) throw new Error('用户未登录')
+
+      const { data, error } = await supabase.from('ledgers').insert([{
+        name: newLedgerName.trim(),
+        owner_id: currentUser.id,
+        type: 'personal'
+      }]).select().single()
+
+      if (error) throw error
+
+      // 设为当前账本
+      setCurrentLedger(data)
+      setShowCreateLedger(false)
+      setNewLedgerName('')
+    } catch (error: any) {
+      alert(error.message || '创建账本失败')
+    } finally {
+      setCreatingLedger(false)
+    }
   }
 
   // ─── 登录/注册页面 ────────────────────────────────────────────────
@@ -218,6 +317,7 @@ function App() {
       signup: { title: '创建账号',   sub: '开始记录你的财务' },
       forgot: { title: '找回密码',   sub: '输入账号，我们发送重置链接' },
       reset:  { title: '设置新密码', sub: '请输入你的新密码' },
+      verify: { title: '验证邮箱',   sub: '输入发送到你邮箱的验证码' },
     }
     const cfg = modeConfig[authMode]
 
@@ -238,9 +338,9 @@ function App() {
             <div style={{
               display:'inline-flex', alignItems:'center', justifyContent:'center',
               width:'68px', height:'68px', borderRadius:'22px',
-              background:'rgba(255,255,255,0.2)', backdropFilter:'blur(10px)', marginBottom:'12px'
+              background:'rgba(255,255,255,0.2)', backdropFilter:'blur(10px)', marginBottom:'12px', overflow:'hidden'
             }}>
-              <span style={{ fontSize:'34px' }}>💰</span>
+              <img src={`${import.meta.env.BASE_URL}logo.png`} alt="游游记账" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <div style={{ color:'white', fontSize:'22px', fontWeight:700 }}>{cfg.title}</div>
             <div style={{ color:'rgba(255,255,255,0.75)', fontSize:'13px', marginTop:'4px' }}>{cfg.sub}</div>
@@ -249,16 +349,16 @@ function App() {
           {/* 卡片 */}
           <div style={{ background:'white', borderRadius:'24px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
 
-            {/* Tab（仅登录/注册显示） */}
-            {(authMode === 'login' || authMode === 'signup') && (
+            {/* Tab（登录/注册/验证显示） */}
+            {(authMode === 'login' || authMode === 'signup' || authMode === 'verify') && (
               <div style={{ display:'flex', background:'#f3f4f6', margin:'16px 16px 0', borderRadius:'14px', padding:'4px' }}>
                 {(['login','signup'] as const).map(m => (
-                  <button key={m} onClick={() => setAuthMode(m)} style={{
+                  <button key={m} onClick={() => { setAuthMode(m); setLoginId(''); setPassword(''); setName(''); setVerifyCode(''); }} style={{
                     flex:1, padding:'9px 0', borderRadius:'10px', border:'none', cursor:'pointer',
                     fontSize:'14px', fontWeight:600, transition:'all 0.2s',
-                    background: authMode === m ? 'white' : 'transparent',
-                    color: authMode === m ? '#6366f1' : '#9ca3af',
-                    boxShadow: authMode === m ? '0 1px 4px rgba(0,0,0,0.1)' : 'none'
+                    background: (authMode === m || authMode === 'verify' && m === 'signup') ? 'white' : 'transparent',
+                    color: (authMode === m || authMode === 'verify' && m === 'signup') ? '#6366f1' : '#9ca3af',
+                    boxShadow: (authMode === m || authMode === 'verify' && m === 'signup') ? '0 1px 4px rgba(0,0,0,0.1)' : 'none'
                   }}>
                     {m === 'login' ? '登录' : '注册'}
                   </button>
@@ -326,9 +426,25 @@ function App() {
                 </div>
               )}
 
-              {/* 验证码（登录/注册） */}
-              {(authMode === 'login' || authMode === 'signup') && (
+              {/* 验证码（仅登录） */}
+              {authMode === 'login' && (
                 <Captcha key={captchaKey} onVerify={setCaptchaValid} />
+              )}
+
+              {/* 验证码输入（verify模式） */}
+              {authMode === 'verify' && (
+                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                  <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'10px 14px', color:'#1d4ed8', fontSize:'13px', textAlign:'center' }}>
+                    📧 验证码已发送至：{verifyEmail ? verifyEmail.replace(/^(.{2}).*(@.*)$/, '$1***$2') : ''}
+                  </div>
+                  <div style={{ position:'relative' }}>
+                    <span style={{ position:'absolute', left:'13px', top:'11px', fontSize:'15px' }}>🔢</span>
+                    <input type="text" value={verifyCode} maxLength={6} onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ''))}
+                      placeholder="输入6位验证码"
+                      style={{ width:'100%', paddingLeft:'38px', paddingRight:'14px', paddingTop:'11px', paddingBottom:'11px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'20px', background:'#f9fafb', outline:'none', boxSizing:'border-box', textAlign:'center', letterSpacing:'6px' }}
+                    />
+                  </div>
+                </div>
               )}
 
               {/* 锁定提示 */}
@@ -359,7 +475,7 @@ function App() {
                     opacity: isLoading ? 0.6 : 1, transition:'all 0.2s'
                   }}>
                   {isLoading ? '处理中...' : {
-                    login: '登 录', signup: '注 册', forgot: '发送重置链接', reset: '确认新密码'
+                    login: '登 录', signup: '发送验证码', forgot: '发送重置链接', reset: '确认新密码', verify: '验证并注册'
                   }[authMode]}
                 </button>
               )}
@@ -379,7 +495,7 @@ function App() {
 
           {/* 底部品牌 */}
           <p style={{ textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize:'12px', marginTop:'16px' }}>
-            钱迹 · 智能记账
+            游游记账 · 智能记账
           </p>
         </div>
       </div>
@@ -388,13 +504,18 @@ function App() {
 
   // ─── 主应用 ───────────────────────────────────────────────────────
   const navItems: { page: Page; icon: React.ReactNode; label: string }[] = [
-    { page: 'home',       icon: <HomeIcon size={22} />,   label: '首页' },
-    { page: 'budget',     icon: <Wallet size={22} />,     label: '预算' },
-    { page: 'analytics',  icon: <TrendingUp size={22} />, label: '分析' },
-    { page: 'categories', icon: <Layers size={22} />,     label: '类别' },
-    { page: 'ledgers',    icon: <BookOpen size={22} />,   label: '账本' },
-    { page: 'admin',      icon: <Settings size={22} />,   label: '管理' },
+    { page: 'home',       icon: <HomeIcon size={22} />,    label: '首页' },
+    { page: 'budget',     icon: <Wallet size={22} />,      label: '预算' },
+    { page: 'analytics',   icon: <TrendingUp size={22} />,  label: '分析' },
+    { page: 'categories', icon: <Layers size={22} />,      label: '分类' },
+    { page: 'admin',      icon: <Settings size={22} />,    label: '管理' },
   ]
+
+  // 无账本检查暂时禁用，先确保基本功能正常
+  // const [needCreateLedger, setNeedCreateLedger] = useState(false)
+  // const [newLedgerName, setNewLedgerName] = useState('')
+  // const [creating, setCreating] = useState(false)
+  // const [checkingLedger, setCheckingLedger] = useState(false)
 
   return (
     <div style={{ minHeight: '100dvh', background: '#f3f4f6', paddingBottom: '70px', position: 'relative' }}>
@@ -408,7 +529,7 @@ function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '22px' }}>💰</span>
             <span style={{ fontSize: '17px', fontWeight: 700, background: 'linear-gradient(135deg,#6366f1,#a855f7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              钱迹
+              游游记账
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -441,14 +562,70 @@ function App() {
       </div>
 
       {/* 主内容 */}
-      <div>
+      <div style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
         {currentPage === 'home'       && <Home />}
         {currentPage === 'budget'     && <Budget />}
         {currentPage === 'analytics'  && <Analytics onBack={() => setCurrentPage('home')} />}
         {currentPage === 'categories' && <Categories />}
-        {currentPage === 'ledgers'    && <Ledgers />}
         {currentPage === 'admin'      && <Admin />}
       </div>
+
+      {/* 新用户创建账本弹窗 */}
+      {showCreateLedger && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '16px', padding: '24px', maxWidth: '320px', width: '90%',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '12px', color: '#1f2937' }}>
+              创建你的第一个账本
+            </h2>
+            <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
+              账本是记录你所有交易的地方，可以创建多个账本来分类管理
+            </p>
+            <input
+              type="text"
+              value={newLedgerName}
+              onChange={e => setNewLedgerName(e.target.value)}
+              placeholder="输入账本名称（如：日常开支）"
+              style={{
+                width: '100%', padding: '10px 12px', border: '1.5px solid #e5e7eb',
+                borderRadius: '8px', fontSize: '14px', marginBottom: '16px',
+                boxSizing: 'border-box', outline: 'none'
+              }}
+              onKeyPress={e => e.key === 'Enter' && handleCreateLedger()}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => { setShowCreateLedger(false); setNewLedgerName('') }}
+                disabled={creatingLedger}
+                style={{
+                  flex: 1, padding: '10px', border: '1.5px solid #e5e7eb', borderRadius: '8px',
+                  background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
+                  color: '#6b7280', opacity: creatingLedger ? 0.5 : 1
+                }}
+              >
+                跳过
+              </button>
+              <button
+                onClick={handleCreateLedger}
+                disabled={creatingLedger}
+                style={{
+                  flex: 1, padding: '10px', border: 'none', borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', cursor: 'pointer',
+                  fontSize: '14px', fontWeight: 600, color: 'white', opacity: creatingLedger ? 0.6 : 1
+                }}
+              >
+                {creatingLedger ? '创建中...' : '创建账本'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 底部导航 —— 跟随 #root 宽度 */}
       <div style={{
@@ -484,14 +661,10 @@ function App() {
       </div>
 
       {/* 悬浮记账按钮 */}
-      <FloatButton onClick={() => setIsQuickAddOpen(true)} />
+      <FloatButton />
 
       {/* 快速记账弹窗 */}
-      <QuickAdd
-        isOpen={isQuickAddOpen}
-        onClose={() => setIsQuickAddOpen(false)}
-        onSuccess={() => setCurrentPage('home')}
-      />
+      <QuickAdd />
     </div>
   )
 }
