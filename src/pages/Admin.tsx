@@ -483,7 +483,7 @@ function FamilyPanel() {
 // ── 管理后台主组件 ─────────────────────────────────────────────────────────
 export function Admin() {
   const { user, currentLedger, setCurrentLedger } = useAppStore()
-  const [tab, setTab] = useState<'family' | 'account' | 'ledgers' | 'users'>('family')
+  const [tab, setTab] = useState<'family' | 'account' | 'ledgers' | 'import' | 'users'>('family')
   const [isLoading, setIsLoading] = useState(true)
   const [users, setUsers] = useState<any[]>([])
   const [ledgers, setLedgers] = useState<any[]>([])
