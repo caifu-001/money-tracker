@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import { useState, useRef } from 'react'
 import { X, TrendingUp, TrendingDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAppStore } from '../store/appStore'
@@ -13,7 +13,7 @@ export function QuickAdd({ isOpen, onClose, onSuccess }: QuickAddProps) {
   const { currentLedger } = useAppStore()
   const [type, setType] = useState<'expense' | 'income'>('expense')
   const [amount, setAmount] = useState('')
-  const [category, setCategory] = useState('其他')
+  const [category] = useState('其他')
   const [loading, setLoading] = useState(false)
   const amountRef = useRef<HTMLInputElement>(null)
 
