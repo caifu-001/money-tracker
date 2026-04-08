@@ -298,8 +298,12 @@ function App() {
 
       if (error) throw error
 
-      // 设为当前账本
+      // 设为当前账本并保存为默认
       setCurrentLedger(data)
+      localStorage.setItem('qianji_default_ledger_id', data.id)
+      localStorage.setItem('qianji_default_ledger_name', data.name)
+      localStorage.setItem('qianji_default_ledger_type', data.type)
+      localStorage.setItem('qianji_default_ledger_owner', data.owner_id)
       setShowCreateLedger(false)
       setNewLedgerName('')
     } catch (error: any) {
