@@ -26,11 +26,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+          cache-dependency-path: money-tracker/package-lock.json
 
       - name: Install dependencies
+        working-directory: money-tracker
         run: npm ci
 
       - name: Build
+        working-directory: money-tracker
         run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
@@ -42,7 +45,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: money-tracker/dist
 
   deploy:
     environment:
