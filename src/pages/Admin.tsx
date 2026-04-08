@@ -784,9 +784,15 @@ export function Admin() {
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {isCurrent ? (
-                      <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, fontWeight: 600, background: '#eef2ff', color: '#6366f1' }}>使用中</span>
+                      <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, fontWeight: 600, background: '#eef2ff', color: '#6366f1' }}>当前默认</span>
                     ) : (
-                      <button onClick={() => setCurrentLedger(l)} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: '#f3f4f6', color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>切换</button>
+                      <button onClick={() => {
+                        setCurrentLedger(l)
+                        localStorage.setItem('qianji_default_ledger_id', l.id)
+                        localStorage.setItem('qianji_default_ledger_name', l.name)
+                        localStorage.setItem('qianji_default_ledger_type', l.type)
+                        localStorage.setItem('qianji_default_ledger_owner', l.owner_id)
+                      }} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: '#6366f1', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>设为默认</button>
                     )}
                     <button onClick={() => handleDeleteLedger(l)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: '#fef2f2', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>删除</button>
                   </div>
