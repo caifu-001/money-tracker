@@ -289,9 +289,22 @@ export function Admin() {
     setNewLedgerName(''); setShowCreateLedger(false); loadLedgers()
   }
 
+  const handleSetDefault = async (ledger: any) => {
+    localStorage.setItem('qianji_default_ledger_id', ledger.id)
+    localStorage.setItem('qianji_default_ledger_owner', ledger.owner_id)
+    await setCurrentLedger(ledger)
+    // 触发重新渲染
+    setLedgers(prev => [...prev])
+  }
+
   const handleDeleteLedger = async (ledger: any) => {
     if (ledger.id === currentLedger?.id) { alert('当前账本不能删除'); return }
     if (!confirm(`确定删除账本「${ledger.name}」？所有数据将被删除！`)) return
+    // 如果是默认账本，清理 localStorage
+    if (localStorage.getItem('qianji_default_ledger_id') === ledger.id) {
+      localStorage.removeItem('qianji_default_ledger_id')
+      localStorage.removeItem('qianji_default_ledger_owner')
+    }
     await supabase.from('transactions').delete().eq('ledger_id', ledger.id)
     await supabase.from('categories').delete().eq('ledger_id', ledger.id)
     await supabase.from('budgets').delete().eq('ledger_id', ledger.id)
@@ -464,15 +477,21 @@ export function Admin() {
             }
             const cfg = typeMap[l.type] || typeMap.personal
             const isCurrent = currentLedger?.id === l.id
+            const isDefault = localStorage.getItem('qianji_default_ledger_id') === l.id
             return (
               <div key={l.id} style={{ background: 'white', borderRadius: 16, padding: '14px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: isCurrent ? '2px solid #6366f1' : '2px solid transparent' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ width: 42, height: 42, borderRadius: 12, background: cfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>{cfg.icon}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>{l.name}{isCurrent && <span style={{ fontSize: 11, color: '#6366f1', marginLeft: 6 }}>当前</span>}</p>
-                    <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{cfg.icon} {l.type === 'personal' ? '个人' : l.type === 'family' ? '家庭' : '项目'} · {new Date(l.created_at).toLocaleDateString('zh-CN')}</p>
+                    <p style={{ fontWeight: 700, fontSize: 14, color: '#1f2937' }}>{l.name}{isCurrent && <span style={{ fontSize: 11, color: '#6366f1', marginLeft: 6 }}>当前</span>}{isDefault && <span style={{ fontSize: 11, color: '#fff', marginLeft: 4, background: '#f59e0b', padding: '1px 6px', borderRadius: 10, fontWeight: 600 }}>默认</span>}</p>
+                    <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{l.type === 'personal' ? '个人' : l.type === 'family' ? '家庭' : '项目'} · {new Date(l.created_at).toLocaleDateString('zh-CN')}</p>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    {isDefault ? (
+                      <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, fontWeight: 600, background: '#fffbeb', color: '#d97706' }}>✓ 默认</span>
+                    ) : (
+                      <button onClick={() => handleSetDefault(l)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: '#fffbeb', color: '#d97706', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>默认</button>
+                    )}
                     {isCurrent ? (
                       <span style={{ fontSize: 11, padding: '4px 10px', borderRadius: 20, fontWeight: 600, background: '#eef2ff', color: '#6366f1' }}>使用中</span>
                     ) : (

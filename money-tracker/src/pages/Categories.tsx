@@ -112,11 +112,33 @@ export function Categories() {
     return null
   }
 
+  // 查找节点的父节点
+  const findParent = (nodes: CatNode[], id: string): CatNode | null => {
+    for (const n of nodes) {
+      if (n.children.some(c => c.id === id)) return n
+      if (n.children.length > 0) {
+        const found = findParent(n.children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  // 同级查重：检查 name 是否与同级（same parent 或同为根节点）的其他节点重名
+  const hasSiblingDuplicate = (nodes: CatNode[], parentId: string | null, name: string, excludeId?: string): boolean => {
+    const siblings = parentId
+      ? (findNode(nodes, parentId)?.children || [])
+      : nodes.filter(n => !n.parent_id)
+    return siblings.some(s => s.id !== excludeId && s.name.trim() === name.trim())
+  }
+
   const handleEditSave = async (node: CatNode) => {
-    console.log('[handleEditSave] node.id:', node.id)
     const n = findNode(allCats, node.id)
-    console.log('[handleEditSave] found node:', n)
     if (!n?.editName?.trim()) { alert('名称不能为空'); return }
+    // 同级查重（编辑时排除自己）
+    if (hasSiblingDuplicate(allCats, n.parent_id, n.editName!, node.id)) {
+      alert('该类别名称已存在'); return
+    }
     const { error } = await supabase.from('categories')
       .update({ name: n.editName.trim(), icon: n.editIcon || '📌' })
       .eq('id', node.id)
@@ -128,6 +150,10 @@ export function Categories() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formName.trim()) { alert('请输入类别名称'); return }
+    // 同级查重
+    if (hasSiblingDuplicate(allCats, formParentId, formName)) {
+      alert(formParentId ? '该子类别名称已存在' : '该类别名称已存在'); return
+    }
     const parentLevel = formParentId ? (allCats.find(c => c.id === formParentId)?.level || 0) : 0
     const level = formParentId ? parentLevel + 1 : 1
     if (level > 5) { alert('最多5级'); return }
