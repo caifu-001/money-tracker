@@ -1,7 +1,295 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
-import { Check, Trash2, Copy, UserPlus, Users } from 'lucide-react'
+import { Check, Trash2, Copy, UserPlus, Users, Download, Upload, FileText, Shield } from 'lucide-react'
+
+// ── 导入导出面板 ─────────────────────────────────────────────────────────────
+function ImportExportPanel() {
+  const { currentLedger, user } = useAppStore()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [exportRange, setExportRange] = useState<'month' | 'all'>('all')
+  const [exportMonth, setExportMonth] = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  })
+  const [importing, setImporting] = useState(false)
+  const [importingMsg, setImportingMsg] = useState('')
+  const [importingOk, setImportingOk] = useState<number | null>(null)
+  const [showImportConfirm, setShowImportConfirm] = useState(false)
+  const [importData, setImportData] = useState<any>(null)
+  const [importMode, setImportMode] = useState<'merge' | 'overwrite'>('merge')
+  const [exporting, setExporting] = useState(false)
+
+  const fmt = (n: number) => (n || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  // 导出 CSV（仅当前账本的交易）
+  const handleExportCSV = async () => {
+    if (!currentLedger) { alert('请先选择一个账本'); return }
+    setExporting(true)
+    try {
+      let query = supabase
+        .from('transactions').select('*')
+        .eq('ledger_id', currentLedger.id)
+        .order('date', { ascending: false })
+
+      if (exportRange === 'month') {
+        const [y, m] = exportMonth.split('-')
+        const start = `${y}-${m}-01`
+        const end = `${y}-${m}-31`
+        query = query.gte('date', start).lte('date', end)
+      }
+
+      const { data } = await query
+      const rows = (data || []).map((t: any) => [
+        t.date, t.type === 'income' ? '收入' : '支出',
+        t.category || '', t.amount, t.note || '', t.payment_method || ''
+      ])
+      const csv = [
+        ['日期', '类型', '类别', '金额', '备注', '支付方式'].join(','),
+        ...rows.map((r: any[]) => r.map((c: any) => `"${String(c || '').replace(/"/g, '""')}"`).join(','))
+      ].join('\n')
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url
+      a.download = `游游记账_${currentLedger.name}_${exportRange === 'month' ? exportMonth : '全部'}.csv`
+      a.click(); URL.revokeObjectURL(url)
+    } catch (e: any) { alert('导出失败：' + e.message) }
+    finally { setExporting(false) }
+  }
+
+  // 导出 JSON（全量备份：账本+类别+交易+预算）
+  const handleExportJSON = async () => {
+    if (!user) return
+    setExporting(true)
+    try {
+      const [{ data: ledgers }, { data: cats }, { data: txs }, { data: budgets }] = await Promise.all([
+        supabase.from('ledgers').select('*').eq('owner_id', user.id),
+        currentLedger ? supabase.from('categories').select('*').eq('ledger_id', currentLedger.id) : Promise.resolve({ data: [] }),
+        currentLedger ? supabase.from('transactions').select('*').eq('ledger_id', currentLedger.id).order('date') : Promise.resolve({ data: [] }),
+        currentLedger ? supabase.from('budgets').select('*').eq('ledger_id', currentLedger.id) : Promise.resolve({ data: [] }),
+      ])
+      const backup = {
+        version: 1, app: '游游记账', exportedAt: new Date().toISOString(),
+        ledgerName: currentLedger?.name || '',
+        ledgers, categories: cats, transactions: txs, budgets
+      }
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url
+      a.download = `游游记账_备份_${new Date().toISOString().slice(0,10)}.json`
+      a.click(); URL.revokeObjectURL(url)
+    } catch (e: any) { alert('导出失败：' + e.message) }
+    finally { setExporting(false) }
+  }
+
+  // 选择文件，准备导入
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setImporting(true); setImportingMsg('正在读取文件...')
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (!data.version || !data.transactions) throw new Error('文件格式无效，不是游游记账备份文件')
+      setImportData(data)
+      setImportingOk(null)
+      setShowImportConfirm(true)
+      setImportingMsg('')
+    } catch (e: any) { alert('读取失败：' + e.message); setImportingMsg('') }
+    finally { setImporting(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  // 执行导入
+  const handleImport = async () => {
+    if (!importData || !user) return
+    setImporting(true)
+    setImportingMsg('正在导入...')
+    let ok = 0
+    try {
+      // 找到匹配账本或用第一个
+      let targetLedger = importData.ledgers?.find((l: any) => l.owner_id === user.id) || importData.ledgers?.[0]
+      if (!targetLedger) { alert('备份中没有找到可导入的账本'); return }
+      const ledgerId = targetLedger.id
+
+      if (importMode === 'overwrite') {
+        // 删除旧数据
+        await Promise.all([
+          supabase.from('transactions').delete().eq('ledger_id', ledgerId),
+          supabase.from('categories').delete().eq('ledger_id', ledgerId),
+          supabase.from('budgets').delete().eq('ledger_id', ledgerId),
+        ])
+      }
+
+      // 导入类别
+      if (importData.categories?.length) {
+        const catsToInsert = importData.categories.map((c: any) => ({
+          id: c.id, ledger_id: ledgerId, name: c.name, icon: c.icon || '📌',
+          type: c.type, parent_id: c.parent_id || null, level: c.level || 1
+        })).filter((c: any) => !c.id?.includes('__'))  // 过滤掉 __default 等占位符
+        const { error: catErr } = await supabase.from('categories').upsert(catsToInsert, { onConflict: 'id' })
+        if (catErr) console.error('类别导入错误:', catErr)
+        ok += catsToInsert.length
+      }
+
+      // 导入交易
+      if (importData.transactions?.length) {
+        const txsToInsert = importData.transactions.map((t: any) => ({
+          id: t.id, ledger_id: ledgerId, date: t.date, type: t.type,
+          category: t.category, amount: t.amount, note: t.note || '',
+          payment_method: t.payment_method || null, created_at: t.created_at || new Date().toISOString()
+        })).filter((t: any) => !t.id?.includes('__'))
+        const { error: txErr } = await supabase.from('transactions').upsert(txsToInsert, { onConflict: 'id' })
+        if (txErr) console.error('交易导入错误:', txErr)
+        ok += txsToInsert.length
+      }
+
+      // 导入预算
+      if (importData.budgets?.length) {
+        const budgetsToInsert = importData.budgets.map((b: any) => ({
+          id: b.id, ledger_id: ledgerId, category: b.category, type: b.type,
+          amount: b.amount, month: b.month
+        })).filter((b: any) => !b.id?.includes('__'))
+        await supabase.from('budgets').upsert(budgetsToInsert, { onConflict: 'id' })
+        ok += budgetsToInsert.length
+      }
+
+      setImportingOk(ok)
+      setImportingMsg(`导入完成！共导入 ${ok} 条记录`)
+    } catch (e: any) { alert('导入失败：' + e.message); setImportingMsg('') }
+    finally { setImporting(false) }
+  }
+
+  const preview = importData
+    ? {
+        txs: importData.transactions?.length || 0,
+        cats: importData.categories?.length || 0,
+        budgets: importData.budgets?.length || 0,
+        ledger: importData.ledgerName || importData.ledgers?.[0]?.name || '未知',
+        date: importData.exportedAt ? new Date(importData.exportedAt).toLocaleDateString('zh-CN') : '未知'
+      }
+    : null
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* 导出卡片 */}
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Download size={18} color="#6366f1"/>
+          </div>
+          <p style={{ fontWeight: 700, fontSize: 15, color: '#1f2937' }}>导出数据</p>
+        </div>
+
+        {/* 导出范围（CSV 专用） */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>CSV 导出范围</p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button onClick={() => setExportRange('all')} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              background: exportRange === 'all' ? '#eef2ff' : '#f3f4f6', color: exportRange === 'all' ? '#6366f1' : '#6b7280' }}>
+              全部
+            </button>
+            <button onClick={() => setExportRange('month')} style={{ flex: 1, padding: '9px', borderRadius: 10, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              background: exportRange === 'month' ? '#eef2ff' : '#f3f4f6', color: exportRange === 'month' ? '#6366f1' : '#6b7280' }}>
+              按月份
+            </button>
+          </div>
+          {exportRange === 'month' && (
+            <input type="month" value={exportMonth} onChange={e => setExportMonth(e.target.value)}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid #e5e7eb', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}/>
+          )}
+        </div>
+
+        {/* 导出按钮组 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={handleExportCSV} disabled={exporting || !currentLedger}
+            style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#6366f1', color: 'white', fontWeight: 700, fontSize: 14, cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting || !currentLedger ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <FileText size={16}/> {exporting ? '导出中...' : '📊 导出 CSV'}
+            <span style={{ fontSize: 12, opacity: 0.8 }}>（交易记录，Excel可打开）</span>
+          </button>
+          <button onClick={handleExportJSON} disabled={exporting || !currentLedger}
+            style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 14, cursor: exporting ? 'not-allowed' : 'pointer', opacity: exporting || !currentLedger ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Download size={16}/> {exporting ? '导出中...' : '💾 导出 JSON 备份'}
+            <span style={{ fontSize: 12, opacity: 0.8 }}>（含所有数据，可恢复）</span>
+          </button>
+        </div>
+        {!currentLedger && <p style={{ fontSize: 12, color: '#ef4444', marginTop: 8 }}>⚠️ 请先选择账本</p>}
+      </div>
+
+      {/* 导入卡片 */}
+      <div style={{ background: 'white', borderRadius: 20, padding: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Upload size={18} color="#16a34a"/>
+          </div>
+          <p style={{ fontWeight: 700, fontSize: 15, color: '#1f2937' }}>导入数据</p>
+        </div>
+
+        <input ref={fileRef} type="file" accept=".json" onChange={handleFileChange} style={{ display: 'none' }}/>
+
+        {!showImportConfirm ? (
+          <div style={{ border: '2px dashed #d1d5db', borderRadius: 16, padding: '28px 16px', textAlign: 'center', cursor: 'pointer' }}
+            onClick={() => fileRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); fileRef.current?.files?.length === 0 }}
+          >
+            <Upload size={28} color="#9ca3af" style={{ margin: '0 auto 10px', display: 'block' }}/>
+            <p style={{ fontWeight: 600, color: '#374151', fontSize: 14 }}>点击选择 JSON 备份文件</p>
+            <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>仅支持游游记账导出的 .json 文件</p>
+          </div>
+        ) : (
+          <div style={{ background: '#f9fafb', borderRadius: 16, padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <p style={{ fontWeight: 700, color: '#1f2937', fontSize: 14 }}>📁 {preview?.ledger}</p>
+              <p style={{ fontSize: 12, color: '#9ca3af' }}>{preview?.date} 导出</p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, fontSize: 13, color: '#6b7280' }}>
+              <span>📝 {preview?.txs} 笔交易</span>
+              <span>📂 {preview?.cats} 个类别</span>
+              <span>💰 {preview?.budgets} 条预算</span>
+            </div>
+
+            {/* 导入模式 */}
+            <div style={{ marginBottom: 12 }}>
+              <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 6 }}>导入模式</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setImportMode('merge')} style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  background: importMode === 'merge' ? '#dcfce7' : '#f3f4f6', color: importMode === 'merge' ? '#16a34a' : '#6b7280' }}>
+                  🤝 合并（保留现有数据）
+                </button>
+                <button onClick={() => setImportMode('overwrite')} style={{ flex: 1, padding: '8px', borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  background: importMode === 'overwrite' ? '#fee2e2' : '#f3f4f6', color: importMode === 'overwrite' ? '#dc2626' : '#6b7280' }}>
+                  ⚠️ 覆盖（清空现有数据）
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => { setShowImportConfirm(false); setImportData(null) }}
+                style={{ flex: 1, padding: '10px', borderRadius: 12, border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                取消
+              </button>
+              <button onClick={handleImport} disabled={importing}
+                style={{ flex: 2, padding: '10px', borderRadius: 12, border: 'none', background: importMode === 'overwrite' ? '#ef4444' : '#16a34a', color: 'white', fontWeight: 700, fontSize: 14, cursor: importing ? 'not-allowed' : 'pointer', opacity: importing ? 0.6 : 1 }}>
+                {importing ? importingMsg || '导入中...' : '✓ 确认导入'}
+              </button>
+            </div>
+
+            {importingOk !== null && (
+              <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#dcfce7', color: '#16a34a', fontSize: 13, fontWeight: 600, textAlign: 'center' }}>
+                ✅ {importingMsg}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 安全提示 */}
+      <div style={{ background: '#f0f9ff', borderRadius: 16, padding: '14px 16px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <Shield size={16} color="#0284c7" style={{ flexShrink: 0, marginTop: 2 }}/>
+        <div>
+          <p style={{ fontWeight: 600, fontSize: 13, color: '#0369a1', marginBottom: 4 }}>数据安全提示</p>
+          <p style={{ fontSize: 12, color: '#075985', lineHeight: 1.6 }}>备份文件包含您的所有账目数据，请妥善保管。导入时选择"合并"模式可避免数据丢失。建议定期备份重要数据。</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── 家庭协同面板 ─────────────────────────────────────────────────────────────
 function FamilyPanel() {
@@ -366,8 +654,8 @@ export function Admin() {
       {/* Tab 切换 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {(isAdmin
-          ? [['family','家庭'],['account','账户'],['ledgers','账本'],['users','用户']]
-          : [['family','家庭'],['account','账户'],['ledgers','账本']]
+          ? [['family','家庭'],['account','账户'],['ledgers','账本'],['import','导入导出'],['users','用户']]
+          : [['family','家庭'],['account','账户'],['ledgers','账本'],['import','导入导出']]
         ).map((item: any) => (
           <button key={item[0]} onClick={() => setTab(item[0] as any)}
             style={{ flex: 1, padding: '11px 0', borderRadius: 14, border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer',
@@ -381,6 +669,9 @@ export function Admin() {
 
       {/* ── 家庭协同 ── */}
       {tab === 'family' && <FamilyPanel />}
+
+      {/* ── 导入导出 ── */}
+      {tab === 'import' && <ImportExportPanel />}
 
       {/* ── 账户管理 ── */}
       {tab === 'account' && (
