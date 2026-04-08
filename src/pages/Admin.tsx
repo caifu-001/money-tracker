@@ -487,7 +487,8 @@ export function Admin() {
   const [isLoading, setIsLoading] = useState(true)
   const [users, setUsers] = useState<any[]>([])
   const [ledgers, setLedgers] = useState<any[]>([])
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+  const isSuperAdmin = user?.role === 'admin'  // 超级管理员才能授权其他管理员
   const [editName, setEditName] = useState(user?.name || '')
   const [editEmail, setEditEmail] = useState(user?.email || '')
   const [savingProfile, setSavingProfile] = useState(false)
@@ -506,7 +507,7 @@ export function Admin() {
   const loadUsers = async () => {
     setIsLoading(true)
     const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false })
-    setUsers(data || []); setIsLoading(false)
+    setUsers((data || []) as any[]); setIsLoading(false)
   }
 
   const loadLedgers = async () => {
@@ -526,6 +527,24 @@ export function Admin() {
     const { error } = await supabase.from('users').update({ status: 'active', role }).eq('id', id)
     if (error) { alert('操作失败：' + error.message); return }
     alert('操作成功')
+    loadUsers()
+  }
+
+  // 授权为管理员（仅超级管理员可操作）
+  const handlePromoteToManager = async (id: string) => {
+    if (!confirm('确定授权该用户为管理员？\n\n管理员权限：\n- 审核新用户\n- 重置普通用户密码\n- 禁用/启用普通用户\n\n注意：管理员不能管理其他管理员')) return
+    const { error } = await supabase.from('users').update({ role: 'manager' }).eq('id', id)
+    if (error) { alert('授权失败：' + error.message); return }
+    alert('已授权为管理员')
+    loadUsers()
+  }
+
+  // 撤销管理员权限
+  const handleDemoteToUser = async (id: string) => {
+    if (!confirm('确定撤销该用户的管理员权限？')) return
+    const { error } = await supabase.from('users').update({ role: 'user' }).eq('id', id)
+    if (error) { alert('撤销失败：' + error.message); return }
+    alert('已撤销管理员权限')
     loadUsers()
   }
   const handleDisable = async (id: string) => {
@@ -795,10 +814,13 @@ export function Admin() {
           ) : users.map(u => {
             const sc = statusConfig[u.status] || statusConfig.pending
             const isAdminUser = u.role === 'admin'
+            const isManagerUser = u.role === 'manager'
+            const isPrivileged = isAdminUser || isManagerUser
+            const canManage = isSuperAdmin || (user?.role === 'manager' && !isPrivileged)  // 超级管理员可管理所有人，普通管理员只能管理普通用户
             return (
               <div key={u.id} style={{ background: 'white', borderRadius: 16, padding: '14px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 12, background: isAdminUser ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 800, color: isAdminUser ? 'white' : '#6b7280', flexShrink: 0 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: isAdminUser ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : isManagerUser ? 'linear-gradient(135deg,#8b5cf6,#a78bfa)' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 800, color: isPrivileged ? 'white' : '#6b7280', flexShrink: 0 }}>
                     {u.name?.charAt(0)?.toUpperCase() || '?'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -807,26 +829,43 @@ export function Admin() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
-                    {isAdminUser && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 600, background: '#ede9fe', color: '#7c3aed' }}>管理员</span>}
+                    {isAdminUser && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 600, background: '#ede9fe', color: '#7c3aed' }}>超级管理员</span>}
+                    {isManagerUser && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, fontWeight: 600, background: '#ddd6fe', color: '#6d28d9' }}>管理员</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {u.status === 'pending' && (
+                  {u.status === 'pending' && canManage && (
                     <>
                       <button onClick={() => handleApprove(u.id, 'user')} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>通过-普通</button>
-                      <button onClick={() => handleApprove(u.id, 'admin')} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#ede9fe', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>通过-管理</button>
+                      {isSuperAdmin && (
+                        <button onClick={() => handleApprove(u.id, 'manager')} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#ede9fe', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>通过-管理</button>
+                      )}
                     </>
                   )}
-                  {u.status === 'active' && (
+                  {u.status === 'active' && canManage && (
                     <>
-                      <button onClick={() => { setResetTarget(u); setNewPassword(''); setShowResetForm(true) }} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#eef2ff', color: '#6366f1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>重置密码</button>
-                      <button onClick={() => handleDisable(u.id)} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#fef9c3', color: '#ca8a04', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>禁用</button>
+                      {/* 重置密码：管理员可重置普通用户，超级管理员可重置所有人 */}
+                      {(isSuperAdmin || !isPrivileged) && (
+                        <button onClick={() => { setResetTarget(u); setNewPassword(''); setShowResetForm(true) }} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#eef2ff', color: '#6366f1', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>重置密码</button>
+                      )}
+                      {/* 授权/撤销管理员：仅超级管理员可操作 */}
+                      {isSuperAdmin && u.role === 'user' && (
+                        <button onClick={() => handlePromoteToManager(u.id)} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#ede9fe', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>授权管理</button>
+                      )}
+                      {isSuperAdmin && isManagerUser && (
+                        <button onClick={() => handleDemoteToUser(u.id)} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#f3e8ff', color: '#9333ea', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>撤销权限</button>
+                      )}
+                      {/* 禁用：不能禁用超级管理员，不能禁用自己 */}
+                      {(!isAdminUser || (isSuperAdmin && u.id !== user?.id)) && (
+                        <button onClick={() => handleDisable(u.id)} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#fef9c3', color: '#ca8a04', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>禁用</button>
+                      )}
                     </>
                   )}
-                  {u.status === 'disabled' && (
+                  {u.status === 'disabled' && canManage && (
                     <button onClick={() => handleApprove(u.id, u.role || 'user')} style={{ flex: 1, padding: '7px', borderRadius: 10, border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>启用</button>
                   )}
-                  {u.id !== user?.id && (
+                  {/* 删除：超级管理员可删除所有人（除自己），普通管理员只能删除普通用户 */}
+                  {u.id !== user?.id && (isSuperAdmin || (!isPrivileged && user?.role === 'manager')) && (
                     <button onClick={() => handleDeleteUser(u.id)} style={{ padding: '7px 12px', borderRadius: 10, border: 'none', background: '#fee2e2', color: '#dc2626', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>删除</button>
                   )}
                 </div>
