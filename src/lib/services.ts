@@ -3,11 +3,11 @@ import { supabase } from './supabase'
 // 将用户名转换为内部邮箱格式
 function usernameToEmail(username: string): string {
   // 如果已经是邮箱格式，直接返回
-  if (username.includes('@') && !username.endsWith('@qianji.app')) {
-    return username
+  if (username.includes('@')) {
+    return username.toLowerCase()
   }
-  // 否则转换为内部邮箱
-  return `${username.toLowerCase().replace(/\s+/g, '_')}@qianji.app`
+  // 用户名转为小写+@qianji.app后缀
+  return username.toLowerCase() + '@qianji.app'
 }
 
 export const authService = {
@@ -24,26 +24,19 @@ export const authService = {
     })
 
     if (data.user && !error) {
-      // 先检查是否已存在（避免重复插入）
-      const { data: existing } = await supabase
-        .from('users')
-        .select('id')
-        .eq('id', data.user.id)
-        .single()
-
-      if (!existing) {
-        const { error: insertError } = await supabase
+      try {
+        await supabase
           .from('users')
           .insert([{
             id: data.user.id,
             email: email,
             name: displayName,
+            username: usernameOrEmail,
             role: 'user',
-            status: 'pending'   // 新用户默认待审核
+            status: 'pending'
           }])
-        if (insertError) {
-          console.error('Failed to create user record:', insertError)
-        }
+      } catch (err) {
+        console.error('Failed to create user record:', err)
       }
     }
 
@@ -56,6 +49,25 @@ export const authService = {
       email,
       password
     })
+
+    // 检查用户状态
+    if (data.user && !error) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('status')
+        .eq('id', data.user.id)
+        .single()
+      
+      if (userData?.status === 'pending') {
+        await supabase.auth.signOut()
+        return { data: null, error: new Error('账号正在等待管理员审核，请耐心等待') }
+      }
+      if (userData?.status === 'disabled') {
+        await supabase.auth.signOut()
+        return { data: null, error: new Error('账号已被禁用，请联系管理员') }
+      }
+    }
+
     return { data, error }
   },
 
@@ -77,6 +89,34 @@ export const authService = {
 
   async updatePassword(newPassword: string) {
     return await supabase.auth.updateUser({ password: newPassword })
+  },
+
+  async sendOtp(email: string, username: string, password: string) {
+    const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MTI1NDIsImV4cCI6MjA4OTk4ODU0Mn0.eoAm3WjrCYPyuw2JB6M2QUe5QSyP4GkMGg2Buj57fb4'
+    const res = await fetch('https://abkscyijuvkfeazhlquz.supabase.co/functions/v1/send-otp', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json', 
+        'apikey': anonKey,
+        'Authorization': `Bearer ${anonKey}`
+      },
+      body: JSON.stringify({ email, username, password })
+    })
+    return await res.json()
+  },
+
+  async verifyOtp(email: string, code: string) {
+    const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MTI1NDIsImV4cCI6MjA4OTk4ODU0Mn0.eoAm3WjrCYPyuw2JB6M2QUe5QSyP4GkMGg2Buj57fb4'
+    const res = await fetch('https://abkscyijuvkfeazhlquz.supabase.co/functions/v1/verify-otp', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json', 
+        'apikey': anonKey,
+        'Authorization': `Bearer ${anonKey}`
+      },
+      body: JSON.stringify({ email, code })
+    })
+    return await res.json()
   }
 }
 

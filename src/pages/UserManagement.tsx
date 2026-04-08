@@ -1,189 +1,284 @@
-import React, { useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/appStore'
+import { supabase } from '../lib/supabase'
+import { Shield, Check, X, RotateCcw, Trash2 } from 'lucide-react'
 
 export function UserManagement() {
   const { user } = useAppStore()
   const [users, setUsers] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState<'users' | 'ledger'>('users')
+  const [isLoading, setIsLoading] = useState(true)
   const [showResetForm, setShowResetForm] = useState(false)
-  const [resetUserId, setResetUserId] = useState('')
-  const [resetUserName, setResetUserName] = useState('')
+  const [resetUserId, setResetUserId] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
 
-  async function loadUsers() {
-    setLoading(true)
-    const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false })
-    setUsers(data || [])
-    setLoading(false)
-  }
-
-  React.useEffect(() => { loadUsers() }, [])
-
-  async function handleApprove(id: string, role: string = 'user') {
-    await supabase.from('users').update({ status: 'active', role }).eq('id', id)
+  useEffect(() => {
+    if (user?.role !== 'admin') return
     loadUsers()
+  }, [user])
+
+  const loadUsers = async () => {
+    setIsLoading(true)
+    try {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+      setUsers(data || [])
+    } catch (error) {
+      console.error('加载用户列表失败:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  async function handleDisable(id: string) {
-    if (!confirm('确定禁用该用户？禁用后该账号无法登录。')) return
-    await supabase.from('users').update({ status: 'disabled' }).eq('id', id)
-    loadUsers()
+  const handleApproveUser = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ status: 'active' })
+        .eq('id', userId)
+
+      if (error) {
+        alert(`审核失败: ${error.message}`)
+        return
+      }
+
+      setUsers(users.map(u => u.id === userId ? { ...u, status: 'active' } : u))
+      alert('用户已批准')
+    } catch (error: any) {
+      alert(`审核失败: ${error.message}`)
+    }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('确定删除该用户？（Auth账号需在Supabase后台手动清理，否则该邮箱无法重新注册）')) return
-    await supabase.from('users').delete().eq('id', id)
-    loadUsers()
+  const handleRejectUser = async (userId: string) => {
+    if (!confirm('确定拒绝这个用户吗？')) return
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId)
+
+      if (error) {
+        alert(`拒绝失败: ${error.message}`)
+        return
+      }
+
+      setUsers(users.filter(u => u.id !== userId))
+      alert('用户已拒绝')
+    } catch (error: any) {
+      alert(`拒绝失败: ${error.message}`)
+    }
   }
 
-  async function handleResetPassword(e: React.FormEvent) {
+  const handleSetAdmin = async (userId: string, isAdmin: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ role: isAdmin ? 'admin' : 'user' })
+        .eq('id', userId)
+
+      if (error) {
+        alert(`设置失败: ${error.message}`)
+        return
+      }
+
+      setUsers(users.map(u => u.id === userId ? { ...u, role: isAdmin ? 'admin' : 'user' } : u))
+      alert(isAdmin ? '已设置为管理员' : '已设置为普通用户')
+    } catch (error: any) {
+      alert(`设置失败: ${error.message}`)
+    }
+  }
+
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!resetUserId || !newPassword || newPassword.length < 6) {
-      alert('密码长度至少6位')
+    if (!resetUserId || !newPassword) {
+      alert('请输入新密码')
       return
     }
-    // 调用 Edge Function
-    const session = await supabase.auth.getSession()
-    const token = session.data.session?.access_token || ''
-    const res = await fetch(
-      'https://abkscyijuvkfeazhlquz.supabase.co/functions/v1/admin-reset-password',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ target_user_id: resetUserId, new_password: newPassword }),
+
+    try {
+      const { error } = await supabase.auth.admin.updateUserById(resetUserId, {
+        password: newPassword
+      })
+
+      if (error) {
+        alert(`重置失败: ${error.message}`)
+        return
       }
-    )
-    const result = await res.json()
-    if (!res.ok || result.error) {
-      alert(`重置失败：${result.error || '未知错误'}`)
-    } else {
-      alert('✅ 密码重置成功！')
+
       setShowResetForm(false)
+      setResetUserId(null)
       setNewPassword('')
-      setResetUserId('')
-      setResetUserName('')
+      alert('密码已重置')
+    } catch (error: any) {
+      alert(`重置失败: ${error.message}`)
     }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('确定删除这个用户吗？')) return
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId)
+
+      if (error) {
+        alert(`删除失败: ${error.message}`)
+        return
+      }
+
+      setUsers(users.filter(u => u.id !== userId))
+      alert('用户已删除')
+    } catch (error: any) {
+      alert(`删除失败: ${error.message}`)
+    }
+  }
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="p-4 text-center text-gray-500">
+        <Shield size={48} className="mx-auto mb-4 opacity-50" />
+        <p>您没有管理员权限</p>
+      </div>
+    )
   }
 
   return (
-    <div style={{ padding: '0 0 40px' }}>
-      {/* 顶部标题 */}
-      <div style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '24px 20px 20px', marginBottom: '20px' }}>
-        <p style={{ fontSize: '22px', fontWeight: 700, color: 'white', margin: 0 }}>👥 用户管理</p>
-        <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>管理所有注册用户账号</p>
-      </div>
+    <div className="p-4 pb-20">
+      <h1 className="text-2xl font-bold mb-6">👥 用户管理</h1>
 
-      {/* Tab */}
-      <div style={{ display: 'flex', gap: '8px', padding: '0 20px', marginBottom: '16px' }}>
-        {(['users'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '8px 20px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
-            background: tab === t ? '#6366f1' : '#f3f4f6',
-            color: tab === t ? 'white' : '#6b7280',
-          }}>全部用户</button>
-        ))}
-      </div>
+      {/* 重置密码表单 */}
+      {showResetForm && resetUserId && (
+        <form onSubmit={handleResetPassword} className="bg-white p-4 rounded-lg border border-gray-200 mb-6">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">新密码</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="输入新密码"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-      {/* 用户列表 */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>加载中...</div>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="flex-1 bg-blue-500 text-white py-2 rounded-lg font-semibold hover:bg-blue-600"
+              >
+                重置密码
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetForm(false)
+                  setResetUserId(null)
+                  setNewPassword('')
+                }}
+                className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {isLoading ? (
+        <div className="text-center py-8 text-gray-500">加载中...</div>
+      ) : users.length === 0 ? (
+        <div className="text-center py-8 text-gray-500">暂无用户</div>
       ) : (
-        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {users.map(u => (
-            <div key={u.id} style={{
-              background: 'white', borderRadius: '16px', padding: '16px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-                <div style={{
-                  width: '44px', height: '44px', borderRadius: '50%',
-                  background: u.role === 'admin' ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f3f4f6',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '18px', fontWeight: 700, color: u.role === 'admin' ? 'white' : '#6b7280',
-                  flexShrink: 0
-                }}>
-                  {u.name?.charAt(0)?.toUpperCase() || '?'}
+        <div className="space-y-3">
+          {users.map((u) => (
+            <div key={u.id} className="bg-white p-4 rounded-lg border border-gray-200">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <p className="font-semibold text-lg">{u.name || u.email}</p>
+                  <p className="text-sm text-gray-500">{u.email}</p>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 600, color: '#1f2937', fontSize: '15px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {u.name || '未设置昵称'}
-                  </p>
-                  <p style={{ fontSize: '12px', color: '#9ca3af', margin: '2px 0 0' }}>{u.email}</p>
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                  <span style={{
-                    fontSize: '11px', padding: '3px 10px', borderRadius: '20px', fontWeight: 600,
-                    background: u.status === 'active' ? '#dcfce7' : u.status === 'pending' ? '#fef9c3' : '#fee2e2',
-                    color: u.status === 'active' ? '#16a34a' : u.status === 'pending' ? '#ca8a04' : '#dc2626',
-                  }}>
-                    {u.status === 'active' ? '已激活' : u.status === 'pending' ? '待审核' : '已禁用'}
+                <div className="flex gap-2">
+                  <span className={`text-xs px-2 py-1 rounded font-medium ${
+                    u.status === 'active'
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {u.status === 'active' ? '已激活' : '待审核'}
                   </span>
-                  <span style={{
-                    fontSize: '11px', padding: '3px 10px', borderRadius: '20px', fontWeight: 600,
-                    background: u.role === 'admin' ? '#ede9fe' : '#f3f4f6',
-                    color: u.role === 'admin' ? '#7c3aed' : '#6b7280',
-                  }}>
+                  <span className={`text-xs px-2 py-1 rounded font-medium ${
+                    u.role === 'admin'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
                     {u.role === 'admin' ? '管理员' : '普通用户'}
                   </span>
                 </div>
               </div>
 
               {/* 操作按钮 */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div className="flex flex-wrap gap-2">
+                {/* 审核按钮 */}
                 {u.status === 'pending' && (
                   <>
-                    <button onClick={() => handleApprove(u.id, 'user')} style={{ padding: '6px 14px', borderRadius: '12px', border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>✅ 通过（用户）</button>
-                    <button onClick={() => handleApprove(u.id, 'admin')} style={{ padding: '6px 14px', borderRadius: '12px', border: 'none', background: '#ede9fe', color: '#7c3aed', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>🛡️ 通过（管理员）</button>
+                    <button
+                      onClick={() => handleApproveUser(u.id)}
+                      className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600 transition"
+                    >
+                      <Check size={16} /> 批准
+                    </button>
+                    <button
+                      onClick={() => handleRejectUser(u.id)}
+                      className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600 transition"
+                    >
+                      <X size={16} /> 拒绝
+                    </button>
                   </>
                 )}
+
+                {/* 角色切换 */}
+                {u.status === 'active' && u.id !== user?.id && (
+                  <button
+                    onClick={() => handleSetAdmin(u.id, u.role !== 'admin')}
+                    className={`flex items-center gap-1 px-3 py-1 rounded text-sm transition ${
+                      u.role === 'admin'
+                        ? 'bg-purple-500 text-white hover:bg-purple-600'
+                        : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                    }`}
+                  >
+                    <Shield size={16} /> {u.role === 'admin' ? '取消管理员' : '设为管理员'}
+                  </button>
+                )}
+
+                {/* 重置密码 */}
                 {u.status === 'active' && (
-                  <>
-                    <button onClick={() => { setResetUserId(u.id); setResetUserName(u.name || u.email); setShowResetForm(true); setNewPassword('') }} style={{ padding: '6px 14px', borderRadius: '12px', border: 'none', background: '#eef2ff', color: '#6366f1', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>🔑 重置密码</button>
-                    <button onClick={() => handleDisable(u.id)} style={{ padding: '6px 14px', borderRadius: '12px', border: 'none', background: '#fef9c3', color: '#ca8a04', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>🚫 禁用</button>
-                  </>
+                  <button
+                    onClick={() => {
+                      setResetUserId(u.id)
+                      setShowResetForm(true)
+                    }}
+                    className="flex items-center gap-1 px-3 py-1 bg-orange-500 text-white rounded text-sm hover:bg-orange-600 transition"
+                  >
+                    <RotateCcw size={16} /> 重置密码
+                  </button>
                 )}
-                {u.status === 'disabled' && (
-                  <button onClick={() => handleApprove(u.id, u.role || 'user')} style={{ padding: '6px 14px', borderRadius: '12px', border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>✅ 启用</button>
-                )}
+
+                {/* 删除用户 */}
                 {u.id !== user?.id && (
-                  <button onClick={() => handleDelete(u.id)} style={{ padding: '6px 14px', borderRadius: '12px', border: 'none', background: '#fee2e2', color: '#dc2626', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>🗑 删除</button>
+                  <button
+                    onClick={() => handleDeleteUser(u.id)}
+                    className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
+                  >
+                    <Trash2 size={16} /> 删除
+                  </button>
                 )}
               </div>
             </div>
           ))}
         </div>
-      )}
-
-      {/* 重置密码弹窗 */}
-      {showResetForm && (
-        <>
-          <div onClick={() => setShowResetForm(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300 }} />
-          <div style={{
-            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 301,
-            background: 'white', borderRadius: '20px', padding: '24px', width: '90%', maxWidth: '380px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-          }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: '17px', color: '#1f2937' }}>🔑 重置密码</h3>
-            <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
-              为「{resetUserName}」设置新密码（至少6位）
-            </p>
-            <form onSubmit={handleResetPassword}>
-              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                placeholder="输入新密码（至少6位）" minLength={6}
-                style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1.5px solid #e5e7eb', fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginBottom: '16px' }}
-              />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="button" onClick={() => setShowResetForm(false)} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1.5px solid #e5e7eb', background: '#f9fafb', color: '#6b7280', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>取消</button>
-                <button type="submit" style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white', fontSize: '14px', fontWeight: 700, cursor: 'pointer' }}>确认重置</button>
-              </div>
-            </form>
-          </div>
-        </>
       )}
     </div>
   )

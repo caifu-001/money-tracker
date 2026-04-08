@@ -1,252 +1,307 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
-import { UserPlus, Trash2, Crown, Eye, Edit3, Users } from 'lucide-react'
+import { Users, Copy, Check, UserPlus, Trash2, ChevronDown } from 'lucide-react'
 
-const ROLE_LABELS: Record<string, string> = { owner: '👑 拥有者', editor: '✏️ 编辑者', viewer: '👁 查看者' }
-const ROLE_COLORS: Record<string, string> = { owner: '#f59e0b', editor: '#6366f1', viewer: '#6b7280' }
+const ROLE_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  owner:  { label: '👑 所有者', color: '#f59e0b', bg: '#fffbeb' },
+  editor: { label: '✏️ 编辑者', color: '#6366f1', bg: '#eef2ff' },
+  viewer: { label: '👁 查看者', color: '#16a34a', bg: '#dcfce7' },
+}
 
 export function FamilyLedger() {
-  const { currentLedger, user } = useAppStore()
+  const { currentLedger, user, setCurrentLedger } = useAppStore()
   const [members, setMembers] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [showInvite, setShowInvite] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteRole, setInviteRole] = useState<'editor'|'viewer'>('editor')
-  const [inviting, setInviting] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const [showJoin, setShowJoin] = useState(false)
+  const [joining, setJoining] = useState(false)
+  const [joinResult, setJoinResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [myLedgers, setMyLedgers] = useState<any[]>([])
+  const [showLedgerPicker, setShowLedgerPicker] = useState(false)
 
-  const isOwner = currentLedger?.owner_id === user?.id || user?.role === 'admin'
-
-  useEffect(() => {
-    if (currentLedger) loadMembers()
-  }, [currentLedger])
+  // 邀请码 = 账本 ID 前8位大写
+  const inviteCode = currentLedger?.id?.replace(/-/g, '').substring(0, 8).toUpperCase() || ''
+  const inviteLink = `https://caifu-001.github.io/money-tracker/?join=${inviteCode}`
 
   const loadMembers = async () => {
+    if (!currentLedger) return
     setIsLoading(true)
-    const { data } = await supabase
-      .from('ledger_members')
-      .select('*, users(id, name, email, role)')
-      .eq('ledger_id', currentLedger!.id)
-      .order('created_at')
-    setMembers(data || [])
-    setIsLoading(false)
+    try {
+      const { data, error } = await supabase
+        .from('ledger_members')
+        .select('id, role, user_id, users(id, name, email)')
+        .eq('ledger_id', currentLedger.id)
+      if (error) throw error
+      setMembers(data || [])
+    } catch (e) { console.error(e) }
+    finally { setIsLoading(false) }
   }
 
-  const handleInvite = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inviteEmail.trim()) return alert('请输入邮箱或用户名')
-    setInviting(true)
+  const loadMyLedgers = async () => {
+    if (!user) return
+    const { data } = await supabase.from('ledgers').select('*').eq('owner_id', user.id).order('created_at', { ascending: false })
+    setMyLedgers(data || [])
+  }
+
+  useEffect(() => {
+    loadMembers()
+    loadMyLedgers()
+  }, [currentLedger, user])
+
+  const handleCopyCode = async () => {
     try {
-      // 查找用户（支持邮箱或用户名@qianji.app）
-      let email = inviteEmail.trim()
-      if (!email.includes('@')) email = `${email.toLowerCase()}@qianji.app`
+      await navigator.clipboard.writeText(inviteLink)
+    } catch {
+      // fallback
+      const el = document.createElement('textarea')
+      el.value = inviteLink
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
 
-      const { data: targetUser } = await supabase
-        .from('users')
-        .select('id, name, email')
-        .eq('email', email)
-        .single()
-
-      if (!targetUser) {
-        alert('找不到该用户，请确认用户名或邮箱是否正确，且对方已注册')
-        return
-      }
+  const handleJoin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const code = joinCode.trim().toUpperCase().replace(/-/g, '')
+    if (!code || code.length < 6) { setJoinResult({ ok: false, msg: '邀请码格式不正确（至少6位）' }); return }
+    setJoining(true); setJoinResult(null)
+    try {
+      // 查找匹配的账本（ID 去掉横线后前N位匹配）
+      const { data: allLedgers } = await supabase.from('ledgers').select('*')
+      const matched = (allLedgers || []).find((l: any) => {
+        const lid = l.id.replace(/-/g, '').toUpperCase()
+        return lid.startsWith(code) || code.startsWith(lid.substring(0, 8))
+      })
+      if (!matched) { setJoinResult({ ok: false, msg: '邀请码无效，请确认后重试' }); setJoining(false); return }
 
       // 检查是否已是成员
-      const { data: existing } = await supabase
-        .from('ledger_members')
-        .select('id')
-        .eq('ledger_id', currentLedger!.id)
-        .eq('user_id', targetUser.id)
-        .single()
-
-      if (existing) {
-        alert('该用户已经是账本成员')
-        return
+      const { data: existing } = await supabase.from('ledger_members').select('id')
+        .eq('ledger_id', matched.id).eq('user_id', user?.id)
+      if (existing && existing.length > 0) {
+        setJoinResult({ ok: false, msg: `你已经是「${matched.name}」的成员了` })
+        setJoining(false); return
       }
 
+      // 加入账本
       const { error } = await supabase.from('ledger_members').insert([{
-        ledger_id: currentLedger!.id,
-        user_id: targetUser.id,
-        role: inviteRole
+        ledger_id: matched.id, user_id: user?.id, role: 'editor'
       }])
-
       if (error) throw error
-      alert(`已成功邀请 ${targetUser.name || targetUser.email} 加入账本`)
-      setInviteEmail(''); setShowInvite(false)
-      await loadMembers()
-    } catch (e: any) {
-      alert('邀请失败：' + e.message)
-    } finally {
-      setInviting(false)
-    }
+
+      setJoinResult({ ok: true, msg: `✅ 成功加入「${matched.name}」！` })
+      setJoinCode('')
+      // 自动切换到该账本
+      setCurrentLedger(matched)
+      loadMembers()
+    } catch (err: any) {
+      setJoinResult({ ok: false, msg: `加入失败：${err.message}` })
+    } finally { setJoining(false) }
+  }
+
+  const handleRemoveMember = async (memberId: string, memberName: string) => {
+    if (!confirm(`确定移除「${memberName}」？`)) return
+    await supabase.from('ledger_members').delete().eq('id', memberId)
+    loadMembers()
   }
 
   const handleChangeRole = async (memberId: string, newRole: string) => {
     await supabase.from('ledger_members').update({ role: newRole }).eq('id', memberId)
-    await loadMembers()
+    loadMembers()
   }
 
-  const handleRemove = async (memberId: string, memberName: string) => {
-    if (!confirm(`确定移除成员「${memberName}」吗？`)) return
-    await supabase.from('ledger_members').delete().eq('id', memberId)
-    await loadMembers()
+  const handleLeave = async () => {
+    if (!confirm('确定退出该账本？')) return
+    const myMember = members.find((m: any) => m.users?.id === user?.id)
+    if (myMember) {
+      await supabase.from('ledger_members').delete().eq('id', myMember.id)
+      setMembers(prev => prev.filter(m => m.id !== myMember.id))
+    }
   }
 
-  if (!currentLedger) return (
-    <div style={{ textAlign:'center', padding:'60px 16px', color:'#9ca3af' }}>
-      <Users size={48} style={{ margin:'0 auto 12px', opacity:0.2 }}/>
-      <p>请先选择账本</p>
-    </div>
-  )
+  const amIOwner = members.some(m => m.users?.id === user?.id && m.role === 'owner')
+    || currentLedger?.owner_id === user?.id
 
   return (
-    <div style={{ padding:'16px', paddingBottom:'80px' }}>
-
-      {/* 账本信息 */}
-      <div style={{ background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:'20px', padding:'20px', marginBottom:'16px', color:'white' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
-          <div style={{ width:'48px', height:'48px', borderRadius:'16px', background:'rgba(255,255,255,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>
-            {currentLedger.type === 'family' ? '👨‍👩‍👧' : currentLedger.type === 'project' ? '📁' : '👤'}
-          </div>
-          <div>
-            <p style={{ fontWeight:700, fontSize:'18px' }}>{currentLedger.name}</p>
-            <p style={{ fontSize:'12px', opacity:0.8 }}>
-              {currentLedger.type === 'family' ? '家庭账本' : currentLedger.type === 'project' ? '项目账本' : '个人账本'}
-              · {members.length} 位成员
-            </p>
-          </div>
-        </div>
+    <div style={{ minHeight: '100vh', background: '#f3f4f6', padding: '16px 16px 100px' }}>
+      {/* 标题 */}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1f2937' }}>👨‍👩‍👧 家庭协同</h1>
+        <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>邀请家人一起记账，共享账目数据</p>
       </div>
 
-      {/* 邀请成员 */}
-      {isOwner && (
-        <div style={{ marginBottom:'16px' }}>
-          {!showInvite ? (
-            <button onClick={() => setShowInvite(true)} style={{
-              width:'100%', padding:'13px', borderRadius:'14px', border:'2px dashed #c7d2fe',
-              background:'#f5f3ff', color:'#6366f1', fontSize:'14px', fontWeight:600,
-              cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'
-            }}>
-              <UserPlus size={18}/> 邀请成员加入
-            </button>
-          ) : (
-            <form onSubmit={handleInvite} style={{ background:'white', borderRadius:'16px', padding:'16px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)' }}>
-              <p style={{ fontSize:'14px', fontWeight:600, color:'#1f2937', marginBottom:'12px' }}>邀请新成员</p>
-
-              <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
-                placeholder="输入用户名或邮箱"
-                style={{ width:'100%', padding:'11px 14px', border:'1.5px solid #e5e7eb', borderRadius:'12px', fontSize:'14px', outline:'none', boxSizing:'border-box', marginBottom:'10px' }}/>
-
-              {/* 权限选择 */}
-              <p style={{ fontSize:'12px', color:'#6b7280', marginBottom:'8px' }}>设置权限</p>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
-                {([
-                  { role:'editor', icon:<Edit3 size={16}/>, label:'编辑者', desc:'可记账、查看' },
-                  { role:'viewer', icon:<Eye size={16}/>, label:'查看者', desc:'只能查看' },
-                ] as const).map(r => (
-                  <button key={r.role} type="button" onClick={() => setInviteRole(r.role)} style={{
-                    padding:'10px', borderRadius:'12px', border:'2px solid',
-                    borderColor: inviteRole === r.role ? '#6366f1' : '#e5e7eb',
-                    background: inviteRole === r.role ? '#eef2ff' : 'white',
-                    cursor:'pointer', textAlign:'left'
-                  }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px', color: inviteRole === r.role ? '#6366f1' : '#6b7280', marginBottom:'2px' }}>
-                      {r.icon}
-                      <span style={{ fontWeight:600, fontSize:'13px' }}>{r.label}</span>
-                    </div>
-                    <p style={{ fontSize:'11px', color:'#9ca3af' }}>{r.desc}</p>
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display:'flex', gap:'8px' }}>
-                <button type="submit" disabled={inviting} style={{ flex:1, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'white', border:'none', borderRadius:'12px', padding:'12px', fontWeight:600, cursor:'pointer', fontSize:'14px' }}>
-                  {inviting ? '邀请中...' : '确认邀请'}
-                </button>
-                <button type="button" onClick={() => setShowInvite(false)} style={{ padding:'12px 16px', background:'#f3f4f6', color:'#6b7280', border:'none', borderRadius:'12px', cursor:'pointer', fontWeight:600 }}>取消</button>
-              </div>
-            </form>
-          )}
+      {/* 账本选择器 */}
+      {myLedgers.length > 1 && (
+        <div style={{ background: 'white', borderRadius: 16, padding: '12px 16px', marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+          <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>选择要管理的账本</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {myLedgers.map(l => (
+              <button key={l.id} onClick={() => setCurrentLedger(l)}
+                style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  background: currentLedger?.id === l.id ? '#6366f1' : '#f3f4f6',
+                  color: currentLedger?.id === l.id ? 'white' : '#6b7280' }}>
+                {l.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* 成员列表 */}
-      <div>
-        <p style={{ fontSize:'13px', fontWeight:600, color:'#6b7280', marginBottom:'10px' }}>成员列表</p>
-        {isLoading ? (
-          <div style={{ textAlign:'center', padding:'32px', color:'#9ca3af' }}>加载中...</div>
-        ) : members.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'32px', color:'#9ca3af' }}>
-            <Users size={36} style={{ margin:'0 auto 8px', opacity:0.3 }}/>
-            <p>暂无成员，邀请好友一起记账吧</p>
-          </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {members.map(m => {
-              const memberUser = m.users
-              const isMe = memberUser?.id === user?.id
-              const canManage = isOwner && m.role !== 'owner' && !isMe
-              return (
-                <div key={m.id} style={{ background:'white', borderRadius:'14px', padding:'14px', boxShadow:'0 1px 6px rgba(0,0,0,0.05)', display:'flex', alignItems:'center', gap:'12px' }}>
-                  {/* 头像 */}
-                  <div style={{ width:'42px', height:'42px', borderRadius:'50%', background:'linear-gradient(135deg,#818cf8,#a855f7)', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontWeight:700, fontSize:'16px', flexShrink:0 }}>
-                    {(memberUser?.name || memberUser?.email || '?')[0].toUpperCase()}
-                  </div>
-                  {/* 信息 */}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                      <p style={{ fontWeight:600, fontSize:'14px', color:'#1f2937' }}>
-                        {memberUser?.name || memberUser?.email?.split('@')[0] || '未知用户'}
-                      </p>
-                      {isMe && <span style={{ fontSize:'10px', background:'#eef2ff', color:'#6366f1', padding:'2px 6px', borderRadius:'20px', fontWeight:600 }}>我</span>}
-                    </div>
-                    <p style={{ fontSize:'12px', color:'#9ca3af', marginTop:'2px' }}>{memberUser?.email}</p>
-                  </div>
-                  {/* 角色 */}
-                  <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
-                    {canManage ? (
-                      <select value={m.role} onChange={e => handleChangeRole(m.id, e.target.value)}
-                        style={{ padding:'5px 8px', borderRadius:'8px', border:'1.5px solid #e5e7eb', fontSize:'12px', fontWeight:600, color: ROLE_COLORS[m.role], background:'white', cursor:'pointer', outline:'none' }}>
-                        <option value="editor">✏️ 编辑者</option>
-                        <option value="viewer">👁 查看者</option>
-                      </select>
-                    ) : (
-                      <span style={{ fontSize:'12px', fontWeight:600, color: ROLE_COLORS[m.role], background: m.role==='owner'?'#fef3c7':m.role==='editor'?'#eef2ff':'#f3f4f6', padding:'4px 10px', borderRadius:'20px' }}>
-                        {ROLE_LABELS[m.role]}
-                      </span>
-                    )}
-                    {canManage && (
-                      <button onClick={() => handleRemove(m.id, memberUser?.name || memberUser?.email)}
-                        style={{ background:'#fff1f2', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'#ef4444', display:'flex' }}>
-                        <Trash2 size={14}/>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      {!currentLedger ? (
+        <div style={{ textAlign: 'center', padding: 60, background: 'white', borderRadius: 20 }}>
+          <p style={{ fontSize: 44, marginBottom: 12 }}>📒</p>
+          <p style={{ color: '#9ca3af', fontWeight: 600, fontSize: 15 }}>请先选择账本</p>
+        </div>
+      ) : (
+        <>
+          {/* 邀请卡片 */}
+          <div style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius: 20, padding: '20px', marginBottom: 16, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }}/>
+            <div style={{ position: 'relative' }}>
+              <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 6 }}>📖 {currentLedger.name}</p>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, marginBottom: 12 }}>邀请码（发给家人，让他们输入加入）</p>
 
-      {/* 权限说明 */}
-      <div style={{ marginTop:'20px', background:'#f9fafb', borderRadius:'14px', padding:'14px' }}>
-        <p style={{ fontSize:'13px', fontWeight:600, color:'#374151', marginBottom:'8px' }}>权限说明</p>
-        {[
-          { icon:<Crown size={14}/>, role:'拥有者', desc:'可管理成员、修改账本设置、查看所有记录', color:'#f59e0b' },
-          { icon:<Edit3 size={14}/>, role:'编辑者', desc:'可添加/删除账目、查看所有记录', color:'#6366f1' },
-          { icon:<Eye size={14}/>, role:'查看者', desc:'只能查看账目，不能修改', color:'#6b7280' },
-        ].map(r => (
-          <div key={r.role} style={{ display:'flex', alignItems:'flex-start', gap:'8px', marginBottom:'6px' }}>
-            <span style={{ color:r.color, marginTop:'1px', flexShrink:0 }}>{r.icon}</span>
-            <div>
-              <span style={{ fontSize:'12px', fontWeight:600, color:r.color }}>{r.role}：</span>
-              <span style={{ fontSize:'12px', color:'#6b7280' }}>{r.desc}</span>
+              {/* 邀请码大字 */}
+              <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 14, padding: '14px 16px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ color: 'white', fontSize: 26, fontWeight: 900, letterSpacing: 6, fontFamily: 'monospace' }}>{inviteCode}</span>
+                <button onClick={handleCopyCode}
+                  style={{ background: copied ? '#22c55e' : 'rgba(255,255,255,0.25)', border: 'none', borderRadius: 10, padding: '8px 14px', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {copied ? <Check size={14}/> : <Copy size={14}/>}
+                  {copied ? '已复制！' : '复制链接'}
+                </button>
+              </div>
+
+              {/* 加入按钮 */}
+              <button onClick={() => setShowJoin(!showJoin)}
+                style={{ width: '100%', padding: '11px', borderRadius: 12, border: '1.5px solid rgba(255,255,255,0.3)', background: 'transparent', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <UserPlus size={16}/>
+                {showJoin ? '收起' : '输入邀请码加入他人账本'}
+              </button>
             </div>
           </div>
-        ))}
-      </div>
+
+          {/* 加入表单 */}
+          {showJoin && (
+            <div style={{ background: 'white', borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
+              <p style={{ fontWeight: 700, fontSize: 15, color: '#374151', marginBottom: 6 }}>🔗 加入他人账本</p>
+              <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 14 }}>输入对方分享给你的邀请码（8位字母数字）</p>
+              <form onSubmit={handleJoin}>
+                <input type="text" value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                  placeholder="例如：A1B2C3D4"
+                  maxLength={8}
+                  style={{ width: '100%', padding: '13px 14px', borderRadius: 12, border: '1.5px solid #e5e7eb', fontSize: 18, fontWeight: 700, outline: 'none', marginBottom: 12, boxSizing: 'border-box', letterSpacing: 4, fontFamily: 'monospace', textAlign: 'center', textTransform: 'uppercase' }}/>
+                {joinResult && (
+                  <div style={{ padding: '10px 14px', borderRadius: 10, marginBottom: 12, background: joinResult.ok ? '#f0fdf4' : '#fef2f2', color: joinResult.ok ? '#16a34a' : '#ef4444', fontSize: 13, fontWeight: 600 }}>
+                    {joinResult.msg}
+                  </div>
+                )}
+                <button type="submit" disabled={joining || joinCode.length < 6}
+                  style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: joining || joinCode.length < 6 ? '#d1d5db' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white', fontWeight: 700, fontSize: 14, cursor: joining || joinCode.length < 6 ? 'not-allowed' : 'pointer', boxShadow: joining || joinCode.length < 6 ? 'none' : '0 4px 14px rgba(99,102,241,0.3)' }}>
+                  {joining ? '加入中...' : '✓ 确认加入'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* 成员列表 */}
+          <div style={{ background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f3f4f6' }}>
+              <div>
+                <p style={{ fontWeight: 700, fontSize: 15, color: '#1f2937' }}>👥 账本成员</p>
+                <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>共 {members.length} 人 · 所有成员可查看全部账目</p>
+              </div>
+              {!amIOwner && (
+                <button onClick={handleLeave}
+                  style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: 10, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  退出账本
+                </button>
+              )}
+            </div>
+
+            {isLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <div style={{ width: 28, height: 28, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 10px' }}/>
+              </div>
+            ) : members.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <p style={{ fontSize: 36, marginBottom: 10 }}>👤</p>
+                <p style={{ color: '#9ca3af', fontSize: 14 }}>暂无成员，分享邀请码邀请家人加入</p>
+              </div>
+            ) : (
+              <div>
+                {members.map((m: any) => {
+                  const u = m.users
+                  const isMe = u?.id === user?.id
+                  const roleCfg = ROLE_CFG[m.role] || ROLE_CFG.viewer
+                  return (
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid #f9fafb' }}>
+                      {/* 头像 */}
+                      <div style={{ width: 42, height: 42, borderRadius: 12, background: isMe ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: isMe ? 'white' : '#6b7280', marginRight: 12, flexShrink: 0 }}>
+                        {u?.name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+
+                      {/* 信息 */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <p style={{ fontWeight: 600, fontSize: 14, color: '#1f2937' }}>{u?.name || '未知用户'}</p>
+                          {isMe && <span style={{ fontSize: 10, background: '#eef2ff', color: '#6366f1', padding: '1px 6px', borderRadius: 10, fontWeight: 700 }}>我</span>}
+                        </div>
+                        <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 1 }}>{u?.email}</p>
+                      </div>
+
+                      {/* 角色 + 操作 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                        {m.role === 'owner' ? (
+                          <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, fontWeight: 700, background: roleCfg.bg, color: roleCfg.color }}>{roleCfg.label}</span>
+                        ) : amIOwner && !isMe ? (
+                          // 所有者可修改角色
+                          <select value={m.role} onChange={e => handleChangeRole(m.id, e.target.value)}
+                            style={{ padding: '5px 10px', borderRadius: 10, border: '1.5px solid #e5e7eb', fontSize: 12, fontWeight: 600, outline: 'none', cursor: 'pointer', background: roleCfg.bg, color: roleCfg.color }}>
+                            <option value="editor">✏️ 编辑者</option>
+                            <option value="viewer">👁 查看者</option>
+                          </select>
+                        ) : (
+                          <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 20, fontWeight: 700, background: roleCfg.bg, color: roleCfg.color }}>{roleCfg.label}</span>
+                        )}
+
+                        {/* 移除按钮（所有者可移除非所有者成员） */}
+                        {amIOwner && m.role !== 'owner' && !isMe && (
+                          <button onClick={() => handleRemoveMember(m.id, u?.name || '该成员')}
+                            style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#fef2f2', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Trash2 size={13}/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 说明 */}
+          <div style={{ background: '#f0fdf4', borderRadius: 16, padding: '14px 16px', marginTop: 16 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#16a34a', marginBottom: 8 }}>📋 协同规则（方案 A）</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {[
+                '✅ 所有成员可查看账本全部账目',
+                '✅ 所有成员可在账本中记账',
+                '✅ 每人只能编辑/删除自己的记录',
+                '🛡️ 所有者可修改成员角色或移除成员',
+              ].map((t, i) => (
+                <p key={i} style={{ fontSize: 12, color: '#374151', margin: 0 }}>{t}</p>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

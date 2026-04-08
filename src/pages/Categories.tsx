@@ -1,455 +1,370 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
-import { Plus, Trash2, ChevronDown, ChevronRight, X, Pencil, Check } from 'lucide-react'
-import { useSystemConfig } from '../lib/systemConfig'
-import { ImeInput } from '../components/ImeInput'
+import { Plus, Trash2, ChevronRight, Check, X } from 'lucide-react'
+import { DEFAULT_CATEGORIES } from '../lib/categories'
 
-interface Category {
-  id: string; name: string; icon: string
-  type: 'income'|'expense'; parent_id: string|null; level: number; children?: Category[]
+interface CatNode {
+  id: string
+  name: string
+  icon: string
+  type: 'income' | 'expense'
+  parent_id: string | null
+  level: number
+  children: CatNode[]
+  isEditing?: boolean
+  editName?: string
+  editIcon?: string
 }
 
-// 常用 emoji 图标库（分组）
-const EMOJI_GROUPS = [
-  { label: '生活', emojis: ['🍔','🍜','🍕','🥗','🍱','☕','🛒','🏠','🛋️','🧹','💡','🚿','🔑','🛏️'] },
-  { label: '交通', emojis: ['🚗','🚌','🚇','✈️','🚲','🛵','🚕','🚂','⛽','🅿️'] },
-  { label: '娱乐', emojis: ['🎮','🎬','🎵','🎨','📚','🎯','🏋️','⚽','🎭','🎪','🎲','🎸'] },
-  { label: '购物', emojis: ['🛍️','👗','👟','💄','💍','⌚','📱','💻','📷','🎁'] },
-  { label: '医疗', emojis: ['⚕️','💊','🏥','🩺','🩹','🧬','💉','🦷','👓','🩻'] },
-  { label: '金融', emojis: ['💰','💵','💳','📈','📉','🏦','💹','🪙','💎','🏧'] },
-  { label: '工作', emojis: ['💼','📊','📋','🖥️','✏️','📝','🗂️','📌','🔧','⚙️'] },
-  { label: '其他', emojis: ['🌟','❤️','🎀','🌈','🌸','🍀','🔔','🎯','📌','🏷️','🗑️','🔖'] },
-]
-
-function findLevel(cats: Category[], id: string): number {
-  for (const c of cats) {
-    if (c.id === id) return c.level
-    if (c.children) { const f = findLevel(c.children, id); if (f > 0) return f }
-  }
-  return 0
-}
-
-// 图标选择器弹窗
-function EmojiPicker({ value, onChange, onClose }: { value: string; onChange: (e: string) => void; onClose: () => void }) {
-  const [tab, setTab] = useState(0)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
-  return (
-    <div ref={ref} style={{ position:'absolute', zIndex:100, top:'100%', left:0, background:'white', borderRadius:'16px', boxShadow:'0 8px 32px rgba(0,0,0,0.15)', padding:'12px', width:'280px', marginTop:'4px' }}>
-      {/* 分组标签 */}
-      <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', marginBottom:'10px' }}>
-        {EMOJI_GROUPS.map((g, i) => (
-          <button key={i} onClick={() => setTab(i)} style={{ padding:'3px 8px', borderRadius:'20px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:600, background: tab===i ? '#6366f1' : '#f3f4f6', color: tab===i ? 'white' : '#6b7280' }}>{g.label}</button>
-        ))}
-      </div>
-      {/* emoji 网格 */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'4px' }}>
-        {EMOJI_GROUPS[tab].emojis.map(e => (
-          <button key={e} onClick={() => { onChange(e); onClose() }} style={{ padding:'6px', borderRadius:'8px', border: value===e ? '2px solid #6366f1' : '2px solid transparent', background: value===e ? '#eef2ff' : 'transparent', cursor:'pointer', fontSize:'20px', lineHeight:1 }}>{e}</button>
-        ))}
-      </div>
-      {/* 自定义输入 */}
-      <div style={{ marginTop:'10px', borderTop:'1px solid #f3f4f6', paddingTop:'10px' }}>
-        <p style={{ fontSize:'11px', color:'#9ca3af', marginBottom:'6px' }}>或直接输入 emoji：</p>
-        <input defaultValue={value} onChange={e => onChange(e.target.value)}
-          style={{ width:'100%', padding:'7px 10px', border:'1.5px solid #e5e7eb', borderRadius:'10px', fontSize:'16px', outline:'none', boxSizing:'border-box' }}/>
-      </div>
-    </div>
-  )
+function buildTree(data: any[]): CatNode[] {
+  const map = new Map()
+  data.forEach((c: any) => map.set(c.id, { ...c, children: [] }))
+  const roots: any[] = []
+  data.forEach((c: any) => {
+    const node = map.get(c.id)
+    if (c.parent_id && map.has(c.parent_id)) {
+      map.get(c.parent_id).children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+  return roots
 }
 
 export function Categories() {
   const { currentLedger } = useAppStore()
-  const sysConfig = useSystemConfig()   // ← 读取系统配置（含管理员修改后的默认类别）
-  const [expenseCats, setExpenseCats] = useState<Category[]>([])
-  const [incomeCats, setIncomeCats] = useState<Category[]>([])
+  const [expenseTree, setExpenseTree] = useState<CatNode[]>([])
+  const [incomeTree, setIncomeTree] = useState<CatNode[]>([])
+  const [allCats, setAllCats] = useState<CatNode[]>([])
   const [isLoading, setIsLoading] = useState(true)
-
-  // 顶级新增表单
-  const [showTopForm, setShowTopForm] = useState(false)
-  const [topFormType, setTopFormType] = useState<'income'|'expense'>('expense')
-  const [topFormName, setTopFormName] = useState('')
-  const [topFormIcon, setTopFormIcon] = useState('📌')
-  const [showTopEmojiPicker, setShowTopEmojiPicker] = useState(false)
-
-  // 子类别内联表单
-  const [inlineFormId, setInlineFormId] = useState<string|null>(null)
-  const [inlineName, setInlineName] = useState('')
-  const [inlineIcon, setInlineIcon] = useState('📌')
-  const [showInlineEmojiPicker, setShowInlineEmojiPicker] = useState(false)
-
-  // 编辑状态：editId = 正在编辑的类别 id
-  const [editId, setEditId] = useState<string|null>(null)
-  const [editName, setEditName] = useState('')
-  const [editIcon, setEditIcon] = useState('')
-  const [showEditEmojiPicker, setShowEditEmojiPicker] = useState(false)
-
-  // 预置类别编辑（存在 DB 中，key = 类别名称）
-  const [presetEditKey, setPresetEditKey] = useState<string|null>(null)
-  const [presetEditName, setPresetEditName] = useState('')
-  const [presetEditIcon, setPresetEditIcon] = useState('')
-  const [showPresetEmojiPicker, setShowPresetEmojiPicker] = useState(false)
-  // 预置类别子类别表单
-  const [presetChildKey, setPresetChildKey] = useState<string|null>(null)
-  const [presetChildName, setPresetChildName] = useState('')
-  const [presetChildIcon, setPresetChildIcon] = useState('📌')
-  const [showPresetChildEmojiPicker, setShowPresetChildEmojiPicker] = useState(false)
-
+  const [tab, setTab] = useState<'expense' | 'income'>('expense')
+  const [showForm, setShowForm] = useState(false)
+  const [formType, setFormType] = useState<'income' | 'expense'>('expense')
+  const [formName, setFormName] = useState('')
+  const [formIcon, setFormIcon] = useState('📌')
+  const [formParentId, setFormParentId] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  useEffect(() => { if (currentLedger) loadCategories() }, [currentLedger])
-
-  const loadCategories = async () => {
+  const load = async () => {
+    if (!currentLedger) return
     setIsLoading(true)
-    const { data } = await supabase.from('categories').select('*')
-      .eq('ledger_id', currentLedger?.id).order('level').order('name')
-    if (data) {
-      const map = new Map<string, Category>()
-      data.forEach((c: any) => map.set(c.id, { ...c, children: [] }))
-      const roots: Category[] = []
-      data.forEach((c: any) => {
-        if (c.parent_id) map.get(c.parent_id)?.children?.push(map.get(c.id)!)
-        else roots.push(map.get(c.id)!)
-      })
-      setExpenseCats(roots.filter(c => c.type === 'expense'))
-      setIncomeCats(roots.filter(c => c.type === 'income'))
-    }
-    setIsLoading(false)
+    try {
+      const { data } = await supabase
+        .from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
+
+      // DB 为空 → 初始化预置
+      if (!data || data.length === 0) {
+        const rows: any[] = []
+        ;(DEFAULT_CATEGORIES.expense as any[]).forEach(c => rows.push({
+          ledger_id: currentLedger.id, name: c.name,
+          icon: c.icon || '📌', type: 'expense', parent_id: null, level: 1,
+        }))
+        ;(DEFAULT_CATEGORIES.income as any[]).forEach(c => rows.push({
+          ledger_id: currentLedger.id, name: c.name,
+          icon: c.icon || '📌', type: 'income', parent_id: null, level: 1,
+        }))
+        await supabase.from('categories').insert(rows).then(r => { if (r.error) console.error(r.error) })
+        const { data: fresh } = await supabase.from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
+        apply(fresh || [])
+      } else {
+        apply(data)
+      }
+    } catch (e) { console.error(e) }
+    finally { setIsLoading(false) }
   }
 
-  const handleAddTop = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!topFormName.trim()) return alert('请输入类别名称')
-    const { error } = await supabase.from('categories').insert([{
-      ledger_id: currentLedger!.id, name: topFormName, icon: topFormIcon,
-      type: topFormType, parent_id: null, level: 1
-    }])
-    if (error) return alert(error.message)
-    setTopFormName(''); setTopFormIcon('📌'); setShowTopForm(false)
-    await loadCategories()
+  function apply(data: any[]) {
+    const exp = (data || []).filter((c: any) => c.type === 'expense')
+    const inc = (data || []).filter((c: any) => c.type === 'income')
+    setExpenseTree(buildTree(exp))
+    setIncomeTree(buildTree(inc))
+    setAllCats(buildTree(data || []))
   }
 
-  const handleAddChild = async (e: React.FormEvent, parentId: string, parentType: 'income'|'expense') => {
-    e.preventDefault()
-    if (!inlineName.trim()) return alert('请输入类别名称')
-    const allCats = [...expenseCats, ...incomeCats]
-    const parentLevel = findLevel(allCats, parentId)
-    if (parentLevel >= 5) return alert('最多只能创建5级子类别')
-    const { error } = await supabase.from('categories').insert([{
-      ledger_id: currentLedger!.id, name: inlineName, icon: inlineIcon,
-      type: parentType, parent_id: parentId, level: parentLevel + 1
-    }])
-    if (error) return alert(error.message)
-    setExpanded(prev => new Set([...prev, parentId]))
-    setInlineFormId(null); setInlineName(''); setInlineIcon('📌')
-    await loadCategories()
-  }
+  useEffect(() => { load() }, [currentLedger])
 
-  const handleEdit = async (id: string) => {
-    if (!editName.trim()) return alert('名称不能为空')
-    const { error } = await supabase.from('categories').update({ name: editName, icon: editIcon }).eq('id', id)
-    if (error) return alert(error.message)
-    setEditId(null)
-    await loadCategories()
+  const toggleExpand = (id: string) => {
+    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定删除？子类别也会一并删除')) return
-    const del = async (cid: string) => {
-      const { data: ch } = await supabase.from('categories').select('id').eq('parent_id', cid)
-      if (ch) for (const c of ch) await del(c.id)
-      await supabase.from('categories').delete().eq('id', cid)
+    if (!confirm('删除该类别？其所有子类别也会被删除。')) return
+    const del = async (catId: string) => {
+      const { data } = await supabase.from('categories').select('id').eq('parent_id', catId)
+      if (data) for (const k of data) await del(k.id)
+      const { error } = await supabase.from('categories').delete().eq('id', catId).eq('ledger_id', currentLedger?.id)
+      if (error) { alert('删除失败：' + (error.message || error)); return }
     }
-    await del(id); await loadCategories()
+    await del(id)
+    load()
   }
 
-  // 预置类别：添加子类别到 DB
-  const handlePresetAddChild = async (e: React.FormEvent, presetName: string, type: 'income'|'expense') => {
+  // 递归查找节点（用于扁平化查找所有层级）
+  const findNode = (nodes: CatNode[], id: string): CatNode | null => {
+    for (const n of nodes) {
+      if (n.id === id) return n
+      if (n.children.length > 0) {
+        const found = findNode(n.children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  const handleEditSave = async (node: CatNode) => {
+    console.log('[handleEditSave] node.id:', node.id)
+    const n = findNode(allCats, node.id)
+    console.log('[handleEditSave] found node:', n)
+    if (!n?.editName?.trim()) { alert('名称不能为空'); return }
+    const { error } = await supabase.from('categories')
+      .update({ name: n.editName.trim(), icon: n.editIcon || '📌' })
+      .eq('id', node.id)
+      .eq('ledger_id', currentLedger?.id)
+    if (error) { alert('保存失败：' + (error.message || error)); return }
+    load()
+  }
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!presetChildName.trim()) return alert('请输入类别名称')
-    // 先检查 DB 中是否有对应的预置类别记录，没有则创建
-    let { data: existing } = await supabase.from('categories').select('id,level').eq('ledger_id', currentLedger!.id).eq('name', presetName).eq('type', type).is('parent_id', null).single()
-    if (!existing) {
-      const preset = sysConfig.defaultExpenseCategories.concat(sysConfig.defaultIncomeCategories).find(c => c.name === presetName)
-      const { data: newCat } = await supabase.from('categories').insert([{
-        ledger_id: currentLedger!.id, name: presetName, icon: preset?.icon || '📌',
-        type, parent_id: null, level: 1
-      }]).select().single()
-      existing = newCat
-    }
-    if (!existing) return alert('创建父类别失败')
+    if (!formName.trim()) { alert('请输入类别名称'); return }
+    const parentLevel = formParentId ? (allCats.find(c => c.id === formParentId)?.level || 0) : 0
+    const level = formParentId ? parentLevel + 1 : 1
+    if (level > 5) { alert('最多5级'); return }
     const { error } = await supabase.from('categories').insert([{
-      ledger_id: currentLedger!.id, name: presetChildName, icon: presetChildIcon,
-      type, parent_id: existing.id, level: 2
+      ledger_id: currentLedger?.id, name: formName.trim(), icon: formIcon, type: formType,
+      parent_id: formParentId, level,
     }])
-    if (error) return alert(error.message)
-    setPresetChildKey(null); setPresetChildName(''); setPresetChildIcon('📌')
-    await loadCategories()
+    if (error) { alert('添加失败：' + (error.message || error)); return }
+    setShowForm(false); setFormName(''); setFormIcon('📌'); setFormParentId(null)
+    load()
   }
 
-  const toggle = (id: string) => setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  // 递归更新节点
+  const updateNodeInTree = (nodes: CatNode[], id: string, updater: (n: CatNode) => CatNode): CatNode[] => {
+    return nodes.map(n => {
+      if (n.id === id) return updater(n)
+      if (n.children.length > 0) {
+        return { ...n, children: updateNodeInTree(n.children, id, updater) }
+      }
+      return n
+    })
+  }
 
-  // 递归渲染自定义类别树
-  const renderTree = (cats: Category[], type: 'income'|'expense', depth = 0): React.ReactNode => cats.map(cat => (
-    <div key={cat.id}>
-      <div style={{
-        display:'flex', alignItems:'center', gap:'8px', padding:'10px 12px',
-        marginLeft: depth * 18 + 'px', background: depth===0 ? '#f9fafb' : '#f3f4f6',
-        borderRadius:'12px', marginBottom:'4px',
-        border: (editId===cat.id || inlineFormId===cat.id) ? '2px solid #6366f1' : '2px solid transparent'
-      }}>
-        {cat.children && cat.children.length > 0
-          ? <button onClick={() => toggle(cat.id)} style={{ background:'none', border:'none', cursor:'pointer', padding:'2px', color:'#9ca3af', display:'flex', flexShrink:0 }}>
-              {expanded.has(cat.id) ? <ChevronDown size={15}/> : <ChevronRight size={15}/>}
-            </button>
-          : <div style={{ width:'19px', flexShrink:0 }}/>
-        }
+  const handleEditStart = (node: CatNode) => {
+    console.log('[handleEditStart] node.id:', node.id, 'node.type:', node.type)
+    const updater = (c: CatNode) => ({ ...c, isEditing: true, editName: c.name, editIcon: c.icon })
+    setAllCats(prev => updateNodeInTree(prev, node.id, updater))
+    if (node.type === 'expense') {
+      setExpenseTree(prev => {
+        const updated = updateNodeInTree(prev, node.id, updater)
+        console.log('[handleEditStart] expenseTree updated, checking first node:', JSON.stringify(updated[0]?.isEditing))
+        return updated
+      })
+    } else {
+      setIncomeTree(prev => updateNodeInTree(prev, node.id, updater))
+    }
+  }
 
-        {editId === cat.id ? (
-          // 编辑模式
-          <>
-            <div style={{ position:'relative', flexShrink:0 }}>
-              <button type="button" onClick={() => setShowEditEmojiPicker(!showEditEmojiPicker)}
-                style={{ width:'36px', height:'36px', borderRadius:'10px', border:'1.5px solid #e5e7eb', background:'white', fontSize:'20px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                {editIcon}
-              </button>
-              {showEditEmojiPicker && <EmojiPicker value={editIcon} onChange={setEditIcon} onClose={() => setShowEditEmojiPicker(false)}/>}
-            </div>
-            <ImeInput value={editName} onChange={setEditName}
-              autoFocus
-              style={{ flex:1, padding:'7px 10px', border:'1.5px solid #6366f1', borderRadius:'10px', fontSize:'14px', outline:'none', minWidth:0 }}/>
-            <button onClick={() => handleEdit(cat.id)} style={{ background:'#6366f1', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'white', display:'flex', flexShrink:0 }}><Check size={14}/></button>
-            <button onClick={() => setEditId(null)} style={{ background:'#f3f4f6', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'#6b7280', display:'flex', flexShrink:0 }}><X size={14}/></button>
-          </>
-        ) : (
-          // 显示模式
-          <>
-            <span style={{ fontSize:'20px', flexShrink:0 }}>{cat.icon}</span>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:'14px', fontWeight:500, color:'#1f2937' }}>{cat.name}</p>
-              <p style={{ fontSize:'11px', color:'#9ca3af' }}>第{cat.level}级{cat.children?.length ? ` · ${cat.children.length}个子类别` : ''}</p>
-            </div>
-            <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
-              <button onClick={() => { setEditId(cat.id); setEditName(cat.name); setEditIcon(cat.icon); setShowEditEmojiPicker(false) }}
-                style={{ background:'#eef2ff', border:'none', borderRadius:'8px', padding:'5px', cursor:'pointer', color:'#6366f1', display:'flex' }}>
-                <Pencil size={13}/>
-              </button>
-              {cat.level < 5 && (
-                <button onClick={() => { if (inlineFormId===cat.id) setInlineFormId(null); else { setInlineFormId(cat.id); setInlineName(''); setInlineIcon('📌'); setExpanded(prev => new Set([...prev, cat.id])) } }}
-                  style={{ background: inlineFormId===cat.id ? '#eef2ff' : '#f0f0f0', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', color: inlineFormId===cat.id ? '#6366f1' : '#6b7280', display:'flex', alignItems:'center', gap:'3px', fontSize:'12px', fontWeight:600 }}>
-                  <Plus size={13}/> 子类
-                </button>
-              )}
-              <button onClick={() => handleDelete(cat.id)}
-                style={{ background:'#fff1f2', border:'none', borderRadius:'8px', padding:'5px', cursor:'pointer', color:'#ef4444', display:'flex' }}>
-                <Trash2 size={13}/>
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+  const handleEditCancel = (node: CatNode) => {
+    const updater = (c: CatNode) => ({ ...c, isEditing: false })
+    setAllCats(prev => updateNodeInTree(prev, node.id, updater))
+    if (node.type === 'expense') {
+      setExpenseTree(prev => updateNodeInTree(prev, node.id, updater))
+    } else {
+      setIncomeTree(prev => updateNodeInTree(prev, node.id, updater))
+    }
+  }
 
-      {/* 内联添加子类别表单 */}
-      {inlineFormId === cat.id && (
-        <form onSubmit={e => handleAddChild(e, cat.id, type)} style={{
-          marginLeft: (depth+1)*18+'px', marginBottom:'6px',
-          background:'white', borderRadius:'12px', padding:'12px',
-          border:'1.5px solid #e0e7ff', boxShadow:'0 2px 8px rgba(99,102,241,0.1)'
-        }}>
-          <p style={{ fontSize:'12px', color:'#6366f1', fontWeight:600, marginBottom:'8px' }}>➕ 添加「{cat.name}」的子类别</p>
-          <div style={{ display:'flex', gap:'8px', marginBottom:'8px', alignItems:'center' }}>
-            <div style={{ position:'relative', flexShrink:0 }}>
-              <button type="button" onClick={() => setShowInlineEmojiPicker(!showInlineEmojiPicker)}
-                style={{ width:'40px', height:'40px', borderRadius:'10px', border:'1.5px solid #e5e7eb', background:'#f9fafb', fontSize:'20px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                {inlineIcon}
-              </button>
-              {showInlineEmojiPicker && <EmojiPicker value={inlineIcon} onChange={setInlineIcon} onClose={() => setShowInlineEmojiPicker(false)}/>}
-            </div>
-            <ImeInput value={inlineName} onChange={setInlineName}
-              placeholder="子类别名称（支持中文）"
-              autoFocus
-              style={{ flex:1, padding:'10px 12px', border:'1.5px solid #e5e7eb', borderRadius:'10px', fontSize:'14px', outline:'none', minWidth:0 }}
-            />
-          </div>
-          <div style={{ display:'flex', gap:'6px' }}>
-            <button type="submit" style={{ flex:1, background:'#6366f1', color:'white', border:'none', borderRadius:'10px', padding:'9px', fontWeight:600, cursor:'pointer', fontSize:'13px' }}>确认添加</button>
-            <button type="button" onClick={() => setInlineFormId(null)} style={{ padding:'9px 12px', background:'#f3f4f6', color:'#6b7280', border:'none', borderRadius:'10px', cursor:'pointer', display:'flex', alignItems:'center' }}><X size={14}/></button>
-          </div>
-        </form>
-      )}
-
-      {cat.children && cat.children.length > 0 && expanded.has(cat.id) && (
-        <div style={{ marginBottom:'4px' }}>{renderTree(cat.children, type, depth+1)}</div>
-      )}
-    </div>
-  ))
-
-  if (!currentLedger) return <div style={{ textAlign:'center', padding:'48px', color:'#9ca3af' }}>请先选择账本</div>
-
-  // 渲染预置类别（支持编辑名称/图标、添加子类别）
-  const renderPreset = (preset: any, type: 'income'|'expense') => {
-    const key = `${type}:${preset.name}`
-    const isEditing = presetEditKey === key
-    const isAddingChild = presetChildKey === key
-    // 查找 DB 中该预置类别的子类别
-    const allCats = type === 'expense' ? expenseCats : incomeCats
-    const dbCat = allCats.find(c => c.name === (isEditing ? presetEditName : preset.name) || c.name === preset.name)
-    const children = dbCat?.children || []
+  function renderNode(node: CatNode, depth = 0): React.ReactNode {
+    const isExp = node.type === 'expense'
+    const accent = isExp ? '#ef4444' : '#22c55e'
+    const hasSubs = node.children.length > 0
+    const isExpanded = expanded.has(node.id)
+    const isEditing = node.isEditing
+    const maxLevel = 5
 
     return (
-      <div key={key} style={{ background:'#f9fafb', borderRadius:'14px', padding:'10px 12px', border: (isEditing||isAddingChild) ? '2px solid #6366f1' : '2px solid transparent', marginBottom:'6px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+      <div key={node.id} style={{ marginLeft: depth * 16 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', padding: '12px 14px', marginBottom: 4, borderRadius: 14,
+          background: isEditing ? '#f5f3ff' : '#f9f9f9',
+          transition: 'all 0.15s',
+        }}>
+          {/* 展开/折叠 */}
+          {hasSubs ? (
+            <button onClick={() => toggleExpand(node.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              <ChevronRight size={16} color="#9ca3af" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: '0.15s' }}/>
+            </button>
+          ) : <div style={{ width: 24 }}/>}
+
+          {/* 图标 */}
           {isEditing ? (
-            <>
-              <div style={{ position:'relative', flexShrink:0 }}>
-                <button type="button" onClick={() => setShowPresetEmojiPicker(!showPresetEmojiPicker)}
-                  style={{ width:'40px', height:'40px', borderRadius:'10px', border:'1.5px solid #e5e7eb', background:'white', fontSize:'22px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  {presetEditIcon}
-                </button>
-                {showPresetEmojiPicker && <EmojiPicker value={presetEditIcon} onChange={setPresetEditIcon} onClose={() => setShowPresetEmojiPicker(false)}/>}
-              </div>
-              <ImeInput value={presetEditName} onChange={setPresetEditName} autoFocus
-                style={{ flex:1, padding:'8px 10px', border:'1.5px solid #6366f1', borderRadius:'10px', fontSize:'14px', outline:'none', minWidth:0 }}/>
-              <button onClick={async () => {
-                // 更新 DB 中的预置类别（如果存在）
-                if (dbCat) await supabase.from('categories').update({ name: presetEditName, icon: presetEditIcon }).eq('id', dbCat.id)
-                setPresetEditKey(null); await loadCategories()
-              }} style={{ background:'#6366f1', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'white', display:'flex', flexShrink:0 }}><Check size={14}/></button>
-              <button onClick={() => setPresetEditKey(null)} style={{ background:'#f3f4f6', border:'none', borderRadius:'8px', padding:'6px', cursor:'pointer', color:'#6b7280', display:'flex', flexShrink:0 }}><X size={14}/></button>
-            </>
+            <input value={node.editIcon || ''} onChange={e => {
+              const val = e.target.value
+              const updater = (c: CatNode) => ({ ...c, editIcon: val })
+              setAllCats(prev => updateNodeInTree(prev, node.id, updater))
+              if (node.type === 'expense') setExpenseTree(prev => updateNodeInTree(prev, node.id, updater))
+              else setIncomeTree(prev => updateNodeInTree(prev, node.id, updater))
+            }}
+              style={{ width: 36, textAlign: 'center', fontSize: 18, border: '1.5px solid #c7d2fe', borderRadius: 8, background: 'white', outline: 'none', marginRight: 8, flexShrink: 0 }}/>
           ) : (
-            <>
-              <span style={{ fontSize:'24px', flexShrink:0 }}>{preset.icon}</span>
-              <div style={{ flex:1 }}>
-                <p style={{ fontSize:'14px', fontWeight:500, color:'#1f2937' }}>{preset.name}</p>
-                {children.length > 0 && <p style={{ fontSize:'11px', color:'#9ca3af' }}>{children.length}个子类别</p>}
-              </div>
-              <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
-                <button onClick={() => { setPresetEditKey(key); setPresetEditName(preset.name); setPresetEditIcon(preset.icon); setShowPresetEmojiPicker(false) }}
-                  style={{ background:'#eef2ff', border:'none', borderRadius:'8px', padding:'5px', cursor:'pointer', color:'#6366f1', display:'flex' }}>
-                  <Pencil size={13}/>
-                </button>
-                <button onClick={() => { if (presetChildKey===key) setPresetChildKey(null); else { setPresetChildKey(key); setPresetChildName(''); setPresetChildIcon('📌') } }}
-                  style={{ background: presetChildKey===key ? '#eef2ff' : '#f0f0f0', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', color: presetChildKey===key ? '#6366f1' : '#6b7280', display:'flex', alignItems:'center', gap:'3px', fontSize:'12px', fontWeight:600 }}>
-                  <Plus size={13}/> 子类
-                </button>
-              </div>
-            </>
+            <span style={{ fontSize: 20, marginRight: 8, flexShrink: 0 }}>{node.icon}</span>
           )}
+
+          {/* 名称 */}
+          {isEditing ? (
+            <input value={node.editName || ''} onChange={e => {
+              const val = e.target.value
+              const updater = (c: CatNode) => ({ ...c, editName: val })
+              setAllCats(prev => updateNodeInTree(prev, node.id, updater))
+              if (node.type === 'expense') setExpenseTree(prev => updateNodeInTree(prev, node.id, updater))
+              else setIncomeTree(prev => updateNodeInTree(prev, node.id, updater))
+            }}
+              style={{ flex: 1, padding: '6px 10px', border: '1.5px solid #c7d2fe', borderRadius: 8, fontSize: 14, outline: 'none', marginRight: 8 }}/>
+          ) : (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', margin: 0 }}>{node.name}</p>
+              <p style={{ fontSize: 11, color: '#9ca3af', margin: '2px 0 0' }}>第{node.level}级 {hasSubs ? `· ${node.children.length}个子类` : ''}</p>
+            </div>
+          )}
+
+          {/* 操作按钮 */}
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {isEditing ? (
+              <>
+                <button onClick={() => handleEditSave(node)} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#dcfce7', color: '#16a34a' }}>
+                  <Check size={14}/>
+                </button>
+                <button onClick={() => handleEditCancel(node)} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f3f4f6', color: '#6b7280' }}>
+                  <X size={14}/>
+                </button>
+              </>
+            ) : (
+              <>
+                {node.level < maxLevel && (
+                  <button onClick={() => { setFormParentId(node.id); setFormType(node.type); setShowForm(true) }}
+                    title="添加子类" style={{ width: 28, height: 28, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#eef2ff', color: '#6366f1' }}>
+                    <Plus size={13}/>
+                  </button>
+                )}
+                <button onClick={() => handleEditStart(node)} title="编辑" style={{ width: 28, height: 28, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#dbeafe', color: '#2563eb' }}>
+                  <span style={{ fontSize: 12 }}>✏️</span>
+                </button>
+                <button onClick={() => handleDelete(node.id)} title="删除" style={{ width: 28, height: 28, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fef2f2', color: '#ef4444' }}>
+                  <Trash2 size={13}/>
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* 预置类别的子类别列表 */}
-        {children.length > 0 && (
-          <div style={{ marginTop:'8px', paddingLeft:'16px', display:'flex', flexDirection:'column', gap:'4px' }}>
-            {children.map((child: Category) => (
-              <div key={child.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', background:'#f3f4f6', borderRadius:'10px' }}>
-                <span style={{ fontSize:'16px' }}>{child.icon}</span>
-                <span style={{ flex:1, fontSize:'13px', color:'#374151' }}>{child.name}</span>
-                <button onClick={() => handleDelete(child.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#d1d5db', display:'flex', padding:'2px' }}><Trash2 size={12}/></button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 预置类别添加子类别表单 */}
-        {presetChildKey === key && (
-          <form onSubmit={e => handlePresetAddChild(e, preset.name, type)} style={{ marginTop:'8px', paddingLeft:'16px' }}>
-            <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-              <div style={{ position:'relative', flexShrink:0 }}>
-                <button type="button" onClick={() => setShowPresetChildEmojiPicker(!showPresetChildEmojiPicker)}
-                  style={{ width:'36px', height:'36px', borderRadius:'10px', border:'1.5px solid #e5e7eb', background:'white', fontSize:'18px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  {presetChildIcon}
-                </button>
-                {showPresetChildEmojiPicker && <EmojiPicker value={presetChildIcon} onChange={setPresetChildIcon} onClose={() => setShowPresetChildEmojiPicker(false)}/>}
-              </div>
-              <ImeInput value={presetChildName} onChange={setPresetChildName}
-                placeholder="子类别名称"
-                autoFocus
-                style={{ flex:1, padding:'8px 10px', border:'1.5px solid #e5e7eb', borderRadius:'10px', fontSize:'13px', outline:'none', minWidth:0 }}
-              />
-              <button type="submit" style={{ background:'#6366f1', color:'white', border:'none', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', fontSize:'12px', fontWeight:600, flexShrink:0 }}>添加</button>
-              <button type="button" onClick={() => setPresetChildKey(null)} style={{ background:'#f3f4f6', border:'none', borderRadius:'8px', padding:'8px', cursor:'pointer', color:'#6b7280', display:'flex', flexShrink:0 }}><X size={13}/></button>
-            </div>
-          </form>
-        )}
+        {hasSubs && isExpanded && node.children.map(child => renderNode(child, depth + 1))}
       </div>
     )
   }
 
-  const Section = ({ title, color, presets, custom, type }: { title:string, color:string, presets:any[], custom:Category[], type:'income'|'expense' }) => (
-    <div>
-      <h2 style={{ fontSize:'15px', fontWeight:700, color, marginBottom:'12px' }}>{title}</h2>
-      <p style={{ fontSize:'12px', color:'#9ca3af', marginBottom:'8px' }}>预置类别 <span style={{ color:'#c7d2fe' }}>（点击 ✏️ 修改，点击 + 子类 添加子类别）</span></p>
-      <div style={{ marginBottom:'16px' }}>
-        {presets.map(c => renderPreset(c, type))}
-      </div>
-      <p style={{ fontSize:'12px', color:'#9ca3af', marginBottom:'8px' }}>自定义类别</p>
-      {custom.length > 0
-        ? renderTree(custom, type)
-        : <p style={{ fontSize:'13px', color:'#d1d5db', textAlign:'center', padding:'12px 0' }}>暂无自定义类别</p>
-      }
-    </div>
-  )
+  const tree = tab === 'expense' ? expenseTree : incomeTree
 
   return (
-    <div style={{ padding:'16px', paddingBottom:'80px', display:'flex', flexDirection:'column', gap:'16px' }}>
-
-      {/* 标题 + 新增按钮 */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <h1 style={{ fontSize:'18px', fontWeight:700, color:'#1f2937' }}>📂 类别管理</h1>
-        <button onClick={() => setShowTopForm(!showTopForm)} style={{
-          display:'flex', alignItems:'center', gap:'4px',
-          background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'white',
-          border:'none', borderRadius:'12px', padding:'8px 14px',
-          fontSize:'13px', fontWeight:600, cursor:'pointer'
-        }}><Plus size={16}/> 新增类别</button>
+    <div style={{ minHeight: '100vh', background: '#f3f4f6', padding: '16px 16px 100px' }}>
+      {/* 标题 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1f2937' }}>📂 类别管理</h1>
+          <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>✏️ 编辑 · ➕ 添加子类 · 🗑 删除</p>
+        </div>
+        <button onClick={() => { setFormParentId(null); setFormType(tab); setShowForm(!showForm) }}
+          style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white', border: 'none', borderRadius: 14, padding: '10px 18px', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 14px rgba(99,102,241,0.3)' }}>
+          + 新建
+        </button>
       </div>
 
-      {/* 顶级新增表单 */}
-      {showTopForm && (
-        <form onSubmit={handleAddTop} style={{ background:'white', borderRadius:'16px', padding:'16px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)' }}>
-          <p style={{ fontSize:'13px', fontWeight:600, color:'#374151', marginBottom:'12px' }}>新增顶级类别</p>
-          <div style={{ display:'flex', gap:'8px', marginBottom:'10px' }}>
-            {(['expense','income'] as const).map(t=>(
-              <button key={t} type="button" onClick={()=>setTopFormType(t)} style={{
-                flex:1, padding:'8px', borderRadius:'10px', border:'1.5px solid',
-                borderColor: topFormType===t ? (t==='expense'?'#ef4444':'#22c55e') : '#e5e7eb',
-                background: topFormType===t ? (t==='expense'?'#fff1f2':'#f0fdf4') : 'white',
-                color: topFormType===t ? (t==='expense'?'#ef4444':'#16a34a') : '#9ca3af',
-                fontSize:'13px', fontWeight:600, cursor:'pointer'
-              }}>{t==='expense'?'💸 支出':'💰 收入'}</button>
+      {/* 新建表单 */}
+      {showForm && (
+        <div style={{ background: 'white', borderRadius: 20, padding: 20, marginBottom: 16, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
+          <p style={{ fontWeight: 700, fontSize: 15, color: '#374151', marginBottom: 16 }}>
+            {formParentId ? `➕ 添加为子类别（第 ${(allCats.find(c => c.id === formParentId)?.level || 0) + 1} 级）` : '➕ 新建一级类别'}
+          </p>
+          {formParentId && (() => {
+            const p = allCats.find(c => c.id === formParentId)
+            return p ? (
+              <div style={{ background: '#eef2ff', borderRadius: 12, padding: '8px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>{p.icon}</span>
+                <span style={{ fontWeight: 700, color: '#4338ca' }}>{p.name}</span>
+                <span style={{ fontSize: 12, color: '#818cf8' }}>的子类别</span>
+              </div>
+            ) : null
+          })()}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {(['expense','income'] as const).map(t => (
+              <button key={t} onClick={() => setFormType(t)} disabled={!!formParentId}
+                style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', fontWeight: 700, fontSize: 13, cursor: formParentId ? 'not-allowed' : 'pointer', opacity: formParentId ? 0.5 : 1,
+                  background: formType === t ? (t === 'expense' ? '#fee2e2' : '#dcfce7') : '#f3f4f6',
+                  color: formType === t ? (t === 'expense' ? '#dc2626' : '#16a34a') : '#9ca3af' }}>
+                {t === 'expense' ? '💸 支出' : '💰 收入'}
+              </button>
             ))}
           </div>
-          <div style={{ display:'flex', gap:'8px', marginBottom:'10px', alignItems:'center' }}>
-            <div style={{ position:'relative', flexShrink:0 }}>
-              <button type="button" onClick={() => setShowTopEmojiPicker(!showTopEmojiPicker)}
-                style={{ width:'48px', height:'48px', borderRadius:'12px', border:'1.5px solid #e5e7eb', background:'#f9fafb', fontSize:'24px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                {topFormIcon}
-              </button>
-              {showTopEmojiPicker && <EmojiPicker value={topFormIcon} onChange={setTopFormIcon} onClose={() => setShowTopEmojiPicker(false)}/>}
+          <div style={{ display: 'grid', gridTemplateColumns: '56px 1fr', gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={{ fontSize: 11, color: '#9ca3af', display: 'block', marginBottom: 4 }}>图标</label>
+              <input type="text" value={formIcon} onChange={e => setFormIcon(e.target.value)}
+                style={{ width: '100%', padding: '8px 4px', textAlign: 'center', fontSize: 20, border: '1.5px solid #e5e7eb', borderRadius: 10, outline: 'none' }}/>
             </div>
-            <ImeInput value={topFormName} onChange={setTopFormName} placeholder="类别名称（支持中文）"
-              style={{ flex:1, padding:'12px', border:'1.5px solid #e5e7eb', borderRadius:'10px', fontSize:'14px', outline:'none', minWidth:0 }}/>
+            <div>
+              <label style={{ fontSize: 11, color: '#9ca3af', display: 'block', marginBottom: 4 }}>名称</label>
+              <input type="text" value={formName} onChange={e => setFormName(e.target.value)}
+                placeholder="例如：餐饮、工资"
+                style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: 14, outline: 'none', boxSizing: 'border-box' }}/>
+            </div>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button type="submit" style={{ flex:1, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', color:'white', border:'none', borderRadius:'10px', padding:'11px', fontWeight:600, cursor:'pointer' }}>添加</button>
-            <button type="button" onClick={()=>setShowTopForm(false)} style={{ flex:1, background:'#f3f4f6', color:'#6b7280', border:'none', borderRadius:'10px', padding:'11px', fontWeight:600, cursor:'pointer' }}>取消</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" onClick={handleAdd}
+              style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 14px rgba(99,102,241,0.3)' }}>
+              ✓ 确认添加
+            </button>
+            <button onClick={() => { setShowForm(false); setFormParentId(null) }}
+              style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid #e5e7eb', background: 'white', color: '#6b7280', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              取消
+            </button>
           </div>
-        </form>
+        </div>
       )}
 
+      {/* 收支切换 */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {(['expense','income'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ flex: 1, padding: '12px 0', borderRadius: 14, border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer', transition: 'all 0.15s',
+              background: tab === t ? (t === 'expense' ? '#ef4444' : '#22c55e') : 'white',
+              color: tab === t ? 'white' : '#9ca3af',
+              boxShadow: tab === t ? (t === 'expense' ? '0 4px 14px rgba(239,68,68,0.3)' : '0 4px 14px rgba(34,197,94,0.3)') : '0 1px 4px rgba(0,0,0,0.06)',
+            }}>
+            {t === 'expense' ? `💸 支出（${expenseTree.length}）` : `💰 收入（${incomeTree.length}）`}
+          </button>
+        ))}
+      </div>
+
+      {/* 类别列表 */}
       {isLoading ? (
-        <div style={{ textAlign:'center', padding:'40px', color:'#9ca3af' }}>加载中...</div>
-      ) : <>
-        <Section title="支出类别" color="#ef4444" presets={sysConfig.defaultExpenseCategories} custom={expenseCats} type="expense"/>
-        <div style={{ height:'1px', background:'#f3f4f6' }}/>
-        <Section title="收入类别" color="#16a34a" presets={sysConfig.defaultIncomeCategories} custom={incomeCats} type="income"/>
-      </>}
+        <div style={{ textAlign: 'center', padding: 60 }}>
+          <div style={{ width: 36, height: 36, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }}/>
+          <p style={{ color: '#9ca3af', fontSize: 14 }}>加载中...</p>
+        </div>
+      ) : tree.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 60, background: 'white', borderRadius: 20 }}>
+          <p style={{ fontSize: 40, marginBottom: 12 }}>📭</p>
+          <p style={{ color: '#9ca3af', fontWeight: 600, fontSize: 15 }}>暂无{tab === "expense" ? "支出" : "收入"}类别</p>
+          <p style={{ color: '#d1d5db', fontSize: 13, marginTop: 6 }}>点击右上角「新建」添加</p>
+        </div>
+      ) : (
+        <div style={{ background: 'white', borderRadius: 20, padding: 8, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
+          {tree.map(node => renderNode(node))}
+        </div>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
