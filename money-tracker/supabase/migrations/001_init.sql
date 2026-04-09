@@ -3,7 +3,7 @@ create table if not exists users (
   id uuid primary key default auth.uid(),
   email text unique not null,
   name text,
-  role text default 'user' check (role in ('admin', 'user')),
+  role text default 'user' check (role in ('admin', 'manager', 'user')),
   status text default 'pending' check (status in ('active', 'pending')),
   created_at timestamp default now()
 );

@@ -7,6 +7,8 @@ import { Budget } from './pages/Budget'
 import { Ledgers } from './pages/Ledgers'
 import { Admin } from './pages/Admin'
 import { Analytics } from './pages/Analytics'
+import { Agreement } from './pages/Agreement'
+import { Privacy } from './pages/Privacy'
 import { Categories } from './pages/Categories'
 import { FamilyLedger } from './pages/FamilyLedger'
 import { QuickAdd } from './components/QuickAdd'
@@ -18,7 +20,7 @@ import {
 } from 'lucide-react'
 
 type AuthMode = 'login' | 'signup' | 'forgot' | 'reset' | 'verify'
-type Page = 'home' | 'budget' | 'analytics' | 'categories' | 'ledgers' | 'admin' | 'family'
+type Page = 'home' | 'budget' | 'analytics' | 'categories' | 'ledgers' | 'admin' | 'family' | 'agreement' | 'privacy'
 
 async function fetchUserAndLedger(
   currentUser: any,
@@ -26,7 +28,7 @@ async function fetchUserAndLedger(
   setCurrentLedger: (l: any) => void
 ) {
   // 查询用户在 users 表的角色
-  let userRole: 'admin' | 'user' = 'user'
+  let userRole: 'admin' | 'manager' | 'user' = 'user'
   try {
     const { data: userData } = await supabase
       .from('users')
@@ -35,7 +37,7 @@ async function fetchUserAndLedger(
       .single()
 
     if (userData) {
-      userRole = (userData.role === 'admin' ? 'admin' : 'user') as 'admin' | 'user'
+      userRole = (userData.role === 'admin' ? 'admin' : userData.role === 'manager' ? 'manager' : 'user') as 'admin' | 'manager' | 'user'
       setUser({
         id: currentUser.id,
         email: currentUser.email || '',
@@ -572,6 +574,8 @@ function App() {
         {currentPage === 'analytics'  && <Analytics />}
         {currentPage === 'categories' && <Categories />}
         {currentPage === 'admin'      && <Admin />}
+        {currentPage === 'agreement'  && <Agreement />}
+        {currentPage === 'privacy'     && <Privacy />}
       </div>
 
       {/* 新用户创建账本弹窗 */}

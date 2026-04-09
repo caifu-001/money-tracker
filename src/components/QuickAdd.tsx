@@ -154,25 +154,23 @@ export function QuickAdd() {
   return (
     <>
       {/* 遮罩 */}
-      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 }} onClick={closeQuickAdd}/>
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200 }} onClick={closeQuickAdd}/>
 
-      {/* 弹窗主体 - 居中卡片，完全不超出屏幕 */}
+      {/* 弹窗主体 - 底部弹出，移动端不超出屏幕 */}
       <div style={{
         position: 'fixed',
-        top: '50%',
+        bottom: 0,
         left: 0,
         right: 0,
-        transform: 'translateY(-50%)',
         maxHeight: '92dvh',
         overflowY: 'auto',
         background: 'white',
         zIndex: 201,
-        borderRadius: 24,
-        boxShadow: '0 12px 48px rgba(0,0,0,0.25)',
+        borderRadius: '24px 24px 0 0',
+        boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
         padding: '16px',
         WebkitOverflowScrolling: 'touch',
         boxSizing: 'border-box',
-        margin: '0 12px',
       }}>
 
         {/* 顶部栏 */}

@@ -902,6 +902,16 @@ export function Admin() {
         </div>
       )}
 
+      {/* 底部法律信息和版本 */}
+      <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 16, fontSize: 13, color: '#9ca3af' }}>
+          <a href="#agreement" style={{ color: '#6366f1', textDecoration: 'none' }}>用户协议</a>
+          <span>·</span>
+          <a href="#privacy" style={{ color: '#6366f1', textDecoration: 'none' }}>隐私政策</a>
+        </div>
+        <span style={{ fontSize: 12, color: '#d1d5db' }}>游游记账 v2.0.1</span>
+      </div>
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
