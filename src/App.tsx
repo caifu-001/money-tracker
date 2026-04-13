@@ -755,8 +755,9 @@ function App() {
           position:'fixed',top:0,left:0,right:0,bottom:0,
           background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',
           zIndex:200,backdropFilter:'blur(4px)'
-        }}>
-          <div style={{
+        }}
+          onClick={() => setShowAgreementModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
             background:'white',borderRadius:'20px',width:'90%',maxWidth:'420px',
             maxHeight:'80vh',display:'flex',flexDirection:'column',
             boxShadow:'0 24px 60px rgba(0,0,0,0.25)',overflow:'hidden'
@@ -776,9 +777,7 @@ function App() {
             </div>
             {/* 内容（可滚动） */}
             <div
-              onScroll={e => { if ((e.target as HTMLDivElement).scrollHeight - (e.target as HTMLDivElement).scrollTop <= (e.target as HTMLDivElement).clientHeight + 20) setAgreementScrolled(true) }}
-              onClick={() => setAgreementScrolled(true)}
-              style={{ flex:1,overflowY:'auto',padding:'16px 20px',fontSize:'13px',color:'#4b5563',lineHeight:'1.8',cursor: agreementScrolled ? 'default' : 'default' }}
+              style={{ flex:1,overflowY:'auto' }}
             >
               {agreementType === 'agreement'
                 ? <Agreement onScrollToBottom={() => setAgreementScrolled(true)} embedded={true} />
@@ -800,7 +799,7 @@ function App() {
                       boxShadow:'0 4px 15px rgba(99,102,241,0.4)'
                     }}
                   >
-                    已阅读并同意
+                    我已阅读并同意以上协议
                   </button>
               }
             </div>
