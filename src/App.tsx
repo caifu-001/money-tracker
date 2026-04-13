@@ -110,6 +110,11 @@ function App() {
   const [showCreateLedger, setShowCreateLedger] = useState(false)
   const [newLedgerName, setNewLedgerName] = useState('')
   const [creatingLedger, setCreatingLedger] = useState(false)
+  // 协议弹窗（注册时强制查看）
+  const [showAgreementModal, setShowAgreementModal] = useState(false)
+  const [agreementType, setAgreementType] = useState<'agreement' | 'privacy'>('agreement')
+  const [agreementScrolled, setAgreementScrolled] = useState(false)
+  const [agreedAgreement, setAgreedAgreement] = useState(false)  // 注册时必须先同意协议
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -177,6 +182,7 @@ function App() {
         }, 2000)
       } else if (authMode === 'signup') {
         // 邮箱验证注册流程
+        if (!agreedAgreement) throw new Error('请先阅读并同意用户协议和隐私政策')
         const emailVal = loginId
         if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) throw new Error('请输入有效的邮箱地址')
         if (!password || password.length < 6) throw new Error('密码至少6位')
@@ -470,6 +476,22 @@ function App() {
                 </div>
               )}
 
+              {/* 协议链接（注册页） */}
+              {authMode === 'signup' && (
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'4px', fontSize:'13px', color:'#6b7280', flexWrap:'wrap' }}>
+                  <span>我已阅读并同意</span>
+                  <button type="button" onClick={() => { setAgreementType('agreement'); setAgreementScrolled(false); setShowAgreementModal(true) }}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0' }}>
+                    《用户协议》
+                  </button>
+                  <span>和</span>
+                  <button type="button" onClick={() => { setAgreementType('privacy'); setAgreementScrolled(false); setShowAgreementModal(true) }}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0' }}>
+                    《隐私政策》
+                  </button>
+                </div>
+              )}
+
               {/* 提交按钮 */}
               {!(authMode === 'forgot' && resetSent) && (
                 <button type="submit" disabled={isLoading}
@@ -673,6 +695,65 @@ function App() {
 
       {/* 快速记账弹窗 */}
       <QuickAdd />
+
+      {/* 协议弹窗（注册强制查看） */}
+      {showAgreementModal && (
+        <div style={{
+          position:'fixed',top:0,left:0,right:0,bottom:0,
+          background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',
+          zIndex:200,backdropFilter:'blur(4px)'
+        }}>
+          <div style={{
+            background:'white',borderRadius:'20px',width:'90%',maxWidth:'420px',
+            maxHeight:'80vh',display:'flex',flexDirection:'column',
+            boxShadow:'0 24px 60px rgba(0,0,0,0.25)',overflow:'hidden'
+          }}>
+            {/* 标题栏 */}
+            <div style={{ padding:'20px 20px 16px', borderBottom:'1px solid #f3f4f6', display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+              <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
+                <span style={{ fontSize:'20px' }}>{agreementType === 'agreement' ? '📄' : '🔒'}</span>
+                <span style={{ fontSize:'16px',fontWeight:700,color:'#1f2937' }}>
+                  {agreementType === 'agreement' ? '用户协议' : '隐私政策'}
+                </span>
+              </div>
+              <button onClick={() => setShowAgreementModal(false)}
+                style={{ background:'none',border:'none',cursor:'pointer',fontSize:'20px',color:'#9ca3af',padding:'4px' }}>
+                ✕
+              </button>
+            </div>
+            {/* 内容（可滚动） */}
+            <div
+              onScroll={e => { if ((e.target as HTMLDivElement).scrollHeight - (e.target as HTMLDivElement).scrollTop <= (e.target as HTMLDivElement).clientHeight + 20) setAgreementScrolled(true) }}
+              onClick={() => setAgreementScrolled(true)}
+              style={{ flex:1,overflowY:'auto',padding:'16px 20px',fontSize:'13px',color:'#4b5563',lineHeight:'1.8',cursor: agreementScrolled ? 'default' : 'default' }}
+            >
+              {agreementType === 'agreement'
+                ? <Agreement onScrollToBottom={() => setAgreementScrolled(true)} embedded={true} />
+                : <Privacy onScrollToBottom={() => setAgreementScrolled(true)} embedded={true} />
+              }
+            </div>
+            {/* 底部确认栏 */}
+            <div style={{ padding:'16px 20px 24px', borderTop:'1px solid #f3f4f6', display:'flex',alignItems:'center',justifyContent:'center' }}>
+              {!agreementScrolled
+                ? <div style={{ width:'100%',padding:'14px',background:'#f3f4f6',borderRadius:'12px',textAlign:'center',color:'#9ca3af',fontSize:'14px' }}>
+                  📜 请向上滚动完整阅读后再确认
+                </div>
+                : <button
+                    onClick={() => { setShowAgreementModal(false); setAgreedAgreement(true) }}
+                    style={{
+                      width:'100%',padding:'14px',border:'none',borderRadius:'12px',
+                      background:'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                      color:'white',fontSize:'15px',fontWeight:700,cursor:'pointer',
+                      boxShadow:'0 4px 15px rgba(99,102,241,0.4)'
+                    }}
+                  >
+                    已阅读并同意
+                  </button>
+              }
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
