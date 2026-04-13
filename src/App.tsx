@@ -476,19 +476,55 @@ function App() {
                 </div>
               )}
 
-              {/* 协议链接（注册页） */}
+              {/* 协议勾选（注册页） */}
               {authMode === 'signup' && (
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'4px', fontSize:'13px', color:'#6b7280', flexWrap:'wrap' }}>
-                  <span>我已阅读并同意</span>
-                  <button type="button" onClick={() => { setAgreementType('agreement'); setAgreementScrolled(false); setShowAgreementModal(true) }}
-                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0' }}>
-                    《用户协议》
-                  </button>
-                  <span>和</span>
-                  <button type="button" onClick={() => { setAgreementType('privacy'); setAgreementScrolled(false); setShowAgreementModal(true) }}
-                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0' }}>
-                    《隐私政策》
-                  </button>
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {/* 勾选控件 */}
+                  <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!agreedAgreement) {
+                          // 首次点击：弹出协议窗口
+                          setAgreementType('agreement')
+                          setAgreementScrolled(false)
+                          setShowAgreementModal(true)
+                        } else {
+                          // 已勾选则取消
+                          setAgreedAgreement(false)
+                        }
+                      }}
+                      style={{
+                        marginTop:'2px',
+                        width:'20px', height:'20px', flexShrink:0,
+                        border: agreedAgreement ? 'none' : '2px solid #d1d5db',
+                        borderRadius: agreedAgreement ? '6px' : '5px',
+                        background: agreedAgreement ? '#6366f1' : '#fff',
+                        cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                        padding:0, transition:'all 0.15s'
+                      }}
+                    >
+                      {agreedAgreement && <span style={{color:'white',fontSize:'13px',fontWeight:700,lineHeight:1}}>✓</span>}
+                    </button>
+                    <span style={{ fontSize:'13px', color:'#6b7280', lineHeight:'1.6', textAlign:'left' }}>
+                      我已阅读并同意
+                      <button type="button" onClick={() => { setAgreementType('agreement'); setAgreementScrolled(false); setShowAgreementModal(true) }}
+                        style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0 2px' }}>
+                        《用户协议》
+                      </button>
+                      和
+                      <button type="button" onClick={() => { setAgreementType('privacy'); setAgreementScrolled(false); setShowAgreementModal(true) }}
+                        style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0 2px' }}>
+                        《隐私政策》
+                      </button>
+                    </span>
+                  </div>
+                  {/* 未勾选提示 */}
+                  {!agreedAgreement && (
+                    <div style={{ fontSize:'12px', color:'#ef4444', textAlign:'center', marginTop:'-4px' }}>
+                      请阅读并勾选协议后才能注册
+                    </div>
+                  )}
                 </div>
               )}
 
