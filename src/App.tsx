@@ -478,51 +478,65 @@ function App() {
 
               {/* 协议勾选（注册页） */}
               {authMode === 'signup' && (
-                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                  {/* 勾选控件 */}
-                  <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
+                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                  {/* 步骤一：勾选框 → 弹出协议 */}
+                  <div style={{
+                    display:'flex', alignItems:'flex-start', gap:'10px',
+                    background: agreedAgreement ? '#f0fdf4' : '#fffbeb',
+                    border: agreedAgreement ? '1.5px solid #bbf7d0' : '1.5px solid #fde68a',
+                    borderRadius:'12px', padding:'12px'
+                  }}>
                     <button
                       type="button"
                       onClick={() => {
                         if (!agreedAgreement) {
-                          // 首次点击：弹出协议窗口
+                          // 首次点击：弹出协议窗口，引导阅读
                           setAgreementType('agreement')
                           setAgreementScrolled(false)
                           setShowAgreementModal(true)
                         } else {
-                          // 已勾选则取消
                           setAgreedAgreement(false)
                         }
                       }}
                       style={{
-                        marginTop:'2px',
-                        width:'20px', height:'20px', flexShrink:0,
-                        border: agreedAgreement ? 'none' : '2px solid #d1d5db',
+                        marginTop:'1px', flexShrink:0,
+                        width:'22px', height:'22px',
+                        border: agreedAgreement ? 'none' : '2.5px solid #d97706',
                         borderRadius: agreedAgreement ? '6px' : '5px',
-                        background: agreedAgreement ? '#6366f1' : '#fff',
+                        background: agreedAgreement ? '#22c55e' : '#fff',
                         cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center',
                         padding:0, transition:'all 0.15s'
                       }}
                     >
-                      {agreedAgreement && <span style={{color:'white',fontSize:'13px',fontWeight:700,lineHeight:1}}>✓</span>}
+                      {agreedAgreement && <span style={{color:'white',fontSize:'14px',fontWeight:700,lineHeight:1}}>✓</span>}
                     </button>
-                    <span style={{ fontSize:'13px', color:'#6b7280', lineHeight:'1.6', textAlign:'left' }}>
-                      我已阅读并同意
-                      <button type="button" onClick={() => { setAgreementType('agreement'); setAgreementScrolled(false); setShowAgreementModal(true) }}
-                        style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0 2px' }}>
-                        《用户协议》
-                      </button>
-                      和
-                      <button type="button" onClick={() => { setAgreementType('privacy'); setAgreementScrolled(false); setShowAgreementModal(true) }}
-                        style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', fontSize:'13px', fontWeight:500, padding:'0 2px' }}>
-                        《隐私政策》
-                      </button>
-                    </span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:'13px', color: agreedAgreement ? '#15803d' : '#92400e', fontWeight:600 }}>
+                        {agreedAgreement ? '✅ 已同意用户协议和隐私政策' : '📋 请先阅读并同意以下协议'}
+                      </div>
+                      <div style={{ fontSize:'12px', color: agreedAgreement ? '#16a34a' : '#b45309', marginTop:'3px', lineHeight:'1.5' }}>
+                        {agreedAgreement
+                          ? '感谢您的信任，点击下方按钮完成注册'
+                          : '点击上方按钮查看完整协议，阅读后滑到底部点击确认'}
+                      </div>
+                      {!agreedAgreement && (
+                        <div style={{ display:'flex', gap:'12px', marginTop:'8px' }}>
+                          <button type="button" onClick={() => { setAgreementType('agreement'); setAgreementScrolled(false); setShowAgreementModal(true) }}
+                            style={{ background:'none', border:'none', cursor:'pointer', color:'#d97706', fontSize:'12px', fontWeight:600, padding:'2px 0', textDecoration:'underline' }}>
+                            《用户协议》
+                          </button>
+                          <button type="button" onClick={() => { setAgreementType('privacy'); setAgreementScrolled(false); setShowAgreementModal(true) }}
+                            style={{ background:'none', border:'none', cursor:'pointer', color:'#d97706', fontSize:'12px', fontWeight:600, padding:'2px 0', textDecoration:'underline' }}>
+                            《隐私政策》
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  {/* 未勾选提示 */}
+                  {/* 步骤二：阅读提示（未勾选时） */}
                   {!agreedAgreement && (
-                    <div style={{ fontSize:'12px', color:'#ef4444', textAlign:'center', marginTop:'-4px' }}>
-                      请阅读并勾选协议后才能注册
+                    <div style={{ fontSize:'12px', color:'#ef4444', textAlign:'center', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'8px' }}>
+                      ⚠️ 请先点击上方黄色区域，阅读协议并确认后才能注册
                     </div>
                   )}
                 </div>
@@ -530,11 +544,14 @@ function App() {
 
               {/* 提交按钮 */}
               {!(authMode === 'forgot' && resetSent) && (
-                <button type="submit" disabled={isLoading}
+                <button type="submit"
+                  disabled={isLoading || (authMode === 'signup' && !agreedAgreement)}
                   style={{
                     width:'100%', padding:'13px', border:'none', borderRadius:'12px', cursor:'pointer',
                     fontSize:'15px', fontWeight:700, color:'white', marginTop:'4px',
-                    background:'linear-gradient(135deg, #667eea, #764ba2)',
+                    background: (authMode === 'signup' && !agreedAgreement)
+                      ? 'linear-gradient(135deg, #d1d5db, #9ca3af)'
+                      : 'linear-gradient(135deg, #667eea, #764ba2)',
                     boxShadow:'0 4px 15px rgba(102,126,234,0.45)',
                     opacity: isLoading ? 0.6 : 1, transition:'all 0.2s'
                   }}>
