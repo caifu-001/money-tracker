@@ -1,8 +1,5 @@
-import { useEffect, useRef } from 'react'
-
 interface PrivacyProps {
   embedded?: boolean
-  onScrollToBottom?: () => void
 }
 
 const CONTENT = (
@@ -50,27 +47,11 @@ const CONTENT = (
   </>
 )
 
-export function Privacy({ embedded = false, onScrollToBottom }: PrivacyProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = contentRef.current
-    if (!el || !onScrollToBottom) return
-    const handler = () => {
-      if (el.scrollHeight - el.scrollTop <= el.clientHeight + 60) {
-        onScrollToBottom()
-      }
-    }
-    el.addEventListener('scroll', handler, { passive: true })
-    handler()
-    return () => el.removeEventListener('scroll', handler)
-  }, [onScrollToBottom])
-
+export function Privacy({ embedded = false }: PrivacyProps) {
   if (embedded) {
     return (
-      <div ref={contentRef}
-        style={{ fontFamily: 'system-ui, sans-serif', overflowY: 'auto', height: '100%' }}>
-        <div style={{ paddingBottom: 16, borderBottom: '1px solid #f3f4f6', marginBottom: 20 }}>
+      <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ paddingBottom: 12, borderBottom: '1px solid #f3f4f6', marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1f2937', margin: '0 0 4px' }}>隐私政策</h2>
           <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Version 3.0.3 · 2026年4月</p>
         </div>

@@ -42,29 +42,11 @@ const CONTENT = (
   </>
 )
 
-export function Agreement({ embedded = false, onScrollToBottom }: AgreementProps) {
-  const contentRef = useRef<HTMLDivElement>(null)
-
-  // 监听滚动，通知父组件是否已滚到底
-  useEffect(() => {
-    const el = contentRef.current
-    if (!el || !onScrollToBottom) return
-    const onScroll = () => {
-      if (el.scrollHeight - el.scrollTop <= el.clientHeight + 60) {
-        onScrollToBottom()
-      }
-    }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    // 初始化也检查一次
-    onScroll()
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [onScrollToBottom])
-
+export function Agreement({ embedded = false }: AgreementProps) {
   if (embedded) {
     return (
-      <div ref={contentRef}
-        style={{ fontFamily: 'system-ui, sans-serif', overflowY: 'auto', height: '100%' }}>
-        <div style={{ paddingBottom: 16, borderBottom: '1px solid #f3f4f6', marginBottom: 20 }}>
+      <div style={{ fontFamily: 'system-ui, sans-serif' }}>
+        <div style={{ paddingBottom: 12, borderBottom: '1px solid #f3f4f6', marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1f2937', margin: '0 0 4px' }}>用户协议</h2>
           <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Version 3.0.3 · 2026年4月</p>
         </div>
