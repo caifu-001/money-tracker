@@ -183,7 +183,7 @@ function App() {
         }, 2000)
       } else if (authMode === 'signup') {
         // 邮箱验证注册流程
-        if (!agreedAgreement) throw new Error('请先阅读并同意用户协议和隐私政策')
+        if (!agreedAgreement) { alert('请先勾选"我已阅读并同意用户协议和隐私政策"'); return }
         const emailVal = loginId
         if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) throw new Error('请输入有效的邮箱地址')
         if (!password || password.length < 6) throw new Error('密码至少6位')
@@ -485,13 +485,20 @@ function App() {
                     display:'flex', alignItems:'flex-start', gap:'10px',
                     background: agreedAgreement ? '#f0fdf4' : '#fffbeb',
                     border: agreedAgreement ? '1.5px solid #bbf7d0' : '1.5px solid #fde68a',
-                    borderRadius:'12px', padding:'12px'
-                  }}>
+                    borderRadius:'12px', padding:'12px', cursor:'pointer'
+                  }}
+                    onClick={() => {
+                      if (!agreedAgreement) {
+                        setAgreementType('agreement')
+                        setAgreementScrolled(false)
+                        setShowAgreementModal(true)
+                      }
+                    }}>
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(e) => {
                         if (!agreedAgreement) {
-                          // 首次点击：弹出协议窗口，引导阅读
+                          e.stopPropagation()
                           setAgreementType('agreement')
                           setAgreementScrolled(false)
                           setShowAgreementModal(true)
@@ -575,8 +582,10 @@ function App() {
             </form>
           </div>
 
+          {/* 版本号 */}
+          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:'12px', marginTop:'4px' }}>游游记账 v3.0.3 · 游游工作室</p>
           {/* 底部品牌 */}
-          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize:'12px', marginTop:'16px' }}>
+          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize:'12px', marginTop:'8px' }}>
             游游记账 · 智能记账
           </p>
         </div>
