@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react'
-  const [showAbout, setShowAbout] = useState(false)
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
 import { Check, Trash2, Copy, UserPlus, Users, Download, Upload, FileText, Shield } from 'lucide-react'
@@ -497,6 +496,7 @@ export function Admin() {
   const [changingPwd, setChangingPwd] = useState(false)
   const [changingPwdValue, setChangingPwdValue] = useState('')
   const [showResetForm, setShowResetForm] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
   const [resetTarget, setResetTarget] = useState<any>(null)
   const [newPassword, setNewPassword] = useState('')
   const [resetting, setResetting] = useState(false)
