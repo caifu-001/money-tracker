@@ -16,6 +16,9 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: https://caifu-001.github.io/money-tracker/
     steps:
       - name: Checkout
         uses: actions/checkout@v4
