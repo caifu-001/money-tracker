@@ -1,8 +1,0 @@
-node_modules/
-dist/
-dist-electron/
-*.local
-.env
-.env.local
-.DS_Store
-*.db
