@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 interface AgreementProps {
   embedded?: boolean
   onScrollToBottom?: () => void
+  onBack?: () => void
 }
 
 const CONTENT = (
@@ -42,13 +43,13 @@ const CONTENT = (
   </>
 )
 
-export function Agreement({ embedded = false }: AgreementProps) {
+export function Agreement({ embedded = false, onBack }: AgreementProps) {
   if (embedded) {
     return (
       <div style={{ fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ paddingBottom: 12, borderBottom: '1px solid #f3f4f6', marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1f2937', margin: '0 0 4px' }}>用户协议</h2>
-          <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Version 3.0.3 · 2026年4月</p>
+          <p style={{ fontSize: 12, color: '#9ca3af', margin: 0 }}>Version 4.0.1 · 2026年4月</p>
         </div>
         {CONTENT}
         <p style={{ textAlign: 'right', fontSize: 12, color: '#9ca3af', marginTop: 24, borderTop: '1px solid #f3f4f6', paddingTop: 12 }}>更新日期：2026年4月13日</p>
@@ -58,17 +59,27 @@ export function Agreement({ embedded = false }: AgreementProps) {
 
   return (
     <div style={{ padding: '24px', maxWidth: 800, margin: '0 auto', minHeight: '100vh', background: '#f5f0e8', fontFamily: 'system-ui, sans-serif' }}>
+      {/* 返回按钮 */}
+      <button onClick={onBack || (() => window.history.back())} style={{
+        display: 'flex', alignItems: 'center', gap: '6px',
+        background: 'white', border: 'none', borderRadius: '10px',
+        padding: '10px 16px', marginBottom: '16px', cursor: 'pointer',
+        fontSize: '14px', fontWeight: 600, color: '#6366f1',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+      }}>
+        ← 返回注册页
+      </button>
       <div style={{ background: 'linear-gradient(135deg, #c0392b, #8b0000)', borderRadius: 20, padding: '40px 32px', textAlign: 'center', position: 'relative', overflow: 'hidden', marginBottom: 24 }}>
         <div style={{ position: 'absolute', width: 100, height: 100, background: 'rgba(255,255,255,0.15)', borderRadius: '50%', top: -30, right: -20 }} />
         <div style={{ position: 'absolute', width: 60, height: 60, background: 'rgba(255,255,255,0.1)', borderRadius: '50%', bottom: -20, left: -10 }} />
         <h1 style={{ color: 'white', fontSize: 28, fontWeight: 900, position: 'relative', zIndex: 1, margin: 0 }}>用户协议</h1>
-        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, marginTop: 8, position: 'relative', zIndex: 1 }}>Version 3.0.3 · 2026年4月</p>
+        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, marginTop: 8, position: 'relative', zIndex: 1 }}>Version 4.0.1 · 2026年4月</p>
       </div>
       <div style={{ background: 'white', borderRadius: 20, padding: '28px 24px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', marginBottom: 16 }}>
         {CONTENT}
       </div>
       <p style={{ textAlign: 'center', color: '#ccc', fontSize: 12, marginTop: 16 }}>更新日期：2026年4月13日</p>
-      <p style={{ textAlign: 'center', color: '#999', fontSize: 12 }}>游游记账 v3.0.3 · 游游工作室</p>
+      <p style={{ textAlign: 'center', color: '#999', fontSize: 12 }}>游游记账 v4.0.1 · 游游工作室</p>
     </div>
   )
 }

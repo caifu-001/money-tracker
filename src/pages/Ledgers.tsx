@@ -34,6 +34,10 @@ export function Ledgers() {
     setCreating(false)
     if (error) { alert(`创建失败: ${error.message}`); return }
     if (data?.[0]) {
+      // 创建者自动成为账本成员
+      await supabase.from('ledger_members').insert([{
+        ledger_id: data[0].id, user_id: user.id, role: 'owner'
+      }])
       setLedgers(prev => [data[0], ...prev])
       handleSelect(data[0])
       setShowCreate(false); setNewName('')

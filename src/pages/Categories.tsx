@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
 import { Plus, Trash2, ChevronRight, Check, X } from 'lucide-react'
-import { DEFAULT_CATEGORIES } from '../lib/categories'
+import { buildDefaultCategoryRows } from '../lib/categories'
 
 interface CatNode {
   id: string
@@ -50,20 +50,19 @@ export function Categories() {
     if (!currentLedger) return
     setIsLoading(true)
     try {
+      // 检查是否需要更新旧分类（缺少新版本特有分类则重建）
       const { data } = await supabase
         .from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
 
-      // DB 为空 → 初始化预置
-      if (!data || data.length === 0) {
-        const rows: any[] = []
-        ;(DEFAULT_CATEGORIES.expense as any[]).forEach(c => rows.push({
-          ledger_id: currentLedger.id, name: c.name,
-          icon: c.icon || '📌', type: 'expense', parent_id: null, level: 1,
-        }))
-        ;(DEFAULT_CATEGORIES.income as any[]).forEach(c => rows.push({
-          ledger_id: currentLedger.id, name: c.name,
-          icon: c.icon || '📌', type: 'income', parent_id: null, level: 1,
-        }))
+      const needsUpdate = !data || data.length === 0 || !data.some((c: any) => c.name === '房贷月供' || c.name === '医疗' || c.name === '工具')
+      
+      if (needsUpdate) {
+        // 删除旧分类
+        if (data && data.length > 0) {
+          await supabase.from('categories').delete().eq('ledger_id', currentLedger.id)
+        }
+        // 初始化预置（含三级分类）
+        const rows = buildDefaultCategoryRows(currentLedger.id)
         await supabase.from('categories').insert(rows).then(r => { if (r.error) console.error(r.error) })
         const { data: fresh } = await supabase.from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
         apply(fresh || [])

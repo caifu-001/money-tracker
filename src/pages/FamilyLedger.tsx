@@ -68,6 +68,7 @@ export function FamilyLedger() {
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user?.id) { setJoinResult({ ok: false, msg: '请先登录' }); return }
     const code = joinCode.trim().toUpperCase().replace(/-/g, '')
     if (!code || code.length < 6) { setJoinResult({ ok: false, msg: '邀请码格式不正确（至少6位）' }); return }
     setJoining(true); setJoinResult(null)
@@ -82,7 +83,7 @@ export function FamilyLedger() {
 
       // 检查是否已是成员
       const { data: existing } = await supabase.from('ledger_members').select('id')
-        .eq('ledger_id', matched.id).eq('user_id', user?.id)
+        .eq('ledger_id', matched.id).eq('user_id', user.id)
       if (existing && existing.length > 0) {
         setJoinResult({ ok: false, msg: `你已经是「${matched.name}」的成员了` })
         setJoining(false); return
@@ -90,7 +91,7 @@ export function FamilyLedger() {
 
       // 加入账本
       const { error } = await supabase.from('ledger_members').insert([{
-        ledger_id: matched.id, user_id: user?.id, role: 'editor'
+        ledger_id: matched.id, user_id: user.id, role: 'editor'
       }])
       if (error) throw error
 

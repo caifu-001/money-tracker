@@ -1,72 +1,118 @@
-// 预置的记账类别（含子分类）
-export const DEFAULT_CATEGORIES = {
-  expense: [
-    { name: '食物', icon: '🍔', children: [
-      { name: '早午晚餐', icon: '🍜' }, { name: '水果零食', icon: '🍎' },
-      { name: '饮料咖啡', icon: '☕' }, { name: '外卖', icon: '📦' },
-    ]},
-    { name: '交通', icon: '🚗', children: [
-      { name: '油费', icon: '⛽' }, { name: '停车费', icon: '🅿️' },
-      { name: '公交地铁', icon: '🚇' }, { name: '打车', icon: '🚕' }, { name: '保养维修', icon: '🔧' },
-    ]},
-    { name: '购物', icon: '🛍️', children: [
-      { name: '服装', icon: '👔' }, { name: '日用品', icon: '🧴' },
-      { name: '数码', icon: '📱' }, { name: '美妆护肤', icon: '💄' },
-    ]},
-    { name: '娱乐', icon: '🎮', children: [
-      { name: '电影', icon: '🎬' }, { name: '游戏', icon: '🎯' },
-      { name: '聚餐社交', icon: '🍻' }, { name: '健身', icon: '💪' },
-    ]},
-    { name: '医疗', icon: '⚕️', children: [
-      { name: '门诊', icon: '🏥' }, { name: '药店', icon: '💊' }, { name: '体检', icon: '🩺' },
-    ]},
-    { name: '教育', icon: '📚', children: [
-      { name: '学费', icon: '🎓' }, { name: '培训', icon: '📖' }, { name: '书籍文具', icon: '✏️' },
-    ]},
-    { name: '住房', icon: '🏠', children: [
-      { name: '房租', icon: '🔑' }, { name: '房贷', icon: '🏦' },
-      { name: '物业费', icon: '🏢' }, { name: '装修', icon: '🛠️' },
-    ]},
-    { name: '水电', icon: '💡', children: [
-      { name: '电费', icon: '⚡' }, { name: '水费', icon: '💧' }, { name: '燃气费', icon: '🔥' },
-    ]},
-    { name: '通讯', icon: '📱', children: [
-      { name: '手机费', icon: '📲' }, { name: '宽带费', icon: '📡' },
-    ]},
-    { name: '保险', icon: '🛡️', children: [
-      { name: '医疗险', icon: '🏥' }, { name: '车险', icon: '🚗' }, { name: '寿险', icon: '👤' },
-    ]},
-    { name: '旅游', icon: '✈️', children: [
-      { name: '机票火车', icon: '🎫' }, { name: '酒店民宿', icon: '🏨' }, { name: '景点门票', icon: '🎟️' },
-    ]},
-    { name: '其他', icon: '📌', children: [] },
-  ],
+// 预置记账类别（支持最多4级）
+export interface CategoryNode {
+  name: string
+  icon?: string
+  children?: CategoryNode[]
+}
+
+export const DEFAULT_CATEGORIES: Record<'expense' | 'income', CategoryNode[]> = {
   income: [
-    { name: '工资', icon: '💰', children: [
-      { name: '基本工资', icon: '💵' }, { name: '绩效', icon: '📊' }, { name: '补贴', icon: '🎁' },
+    { name: '工资收入', icon: '💰' },
+    { name: '兼职收入', icon: '💼' },
+    { name: '废品回收', icon: '♻️' },
+    { name: '人情往来', icon: '🎁', children: [
+      { name: '红包礼金' },
     ]},
-    { name: '奖金', icon: '🏆', children: [
-      { name: '年终奖', icon: '🎄' }, { name: '项目奖', icon: '⭐' }, { name: '全勤奖', icon: '🌟' },
-    ]},
-    { name: '投资', icon: '📈', children: [
-      { name: '股票', icon: '📉' }, { name: '基金', icon: '📊' },
-      { name: '理财', icon: '💹' }, { name: '利息', icon: '💸' },
-    ]},
-    { name: '兼职', icon: '💼', children: [
-      { name: '副业', icon: '🖥️' }, { name: '外包', icon: '📐' },
-    ]},
-    { name: '其他', icon: '📌', children: [] },
+  ],
+  expense: [
+    {
+      name: '居家', icon: '🏠', children: [
+        { name: '买菜原料' },
+        { name: '物业管理费' },
+        { name: '水电气费', children: [
+          { name: '水费' },
+          { name: '电费' },
+          { name: '天然气费' },
+        ]},
+        { name: '衣物', children: [
+          { name: '衣裤' },
+          { name: '鞋子' },
+        ]},
+        { name: '交通', children: [
+          { name: '公交地铁' },
+          { name: '火车客运' },
+          { name: '飞机' },
+          { name: '打车费' },
+        ]},
+        { name: '日化用品' },
+        { name: '电器' },
+        { name: '家具' },
+        { name: '房贷月供' },
+        { name: '工具' },
+        { name: '装备' },
+      ]
+    },
+    {
+      name: '旅游', icon: '✈️', children: [
+        { name: '门票' },
+        { name: '住宿' },
+        { name: '交通' },
+        { name: '装备' },
+        { name: '购物' },
+      ]
+    },
+    {
+      name: '养车', icon: '🚗', children: [
+        { name: '保险费' },
+        { name: '停车费' },
+        { name: '过路费' },
+        { name: '油费' },
+        { name: '保养费' },
+        { name: '年检费' },
+        { name: '配件费' },
+        { name: '罚款费' },
+      ]
+    },
+    {
+      name: '医疗', icon: '🏥', children: [
+        { name: '挂号费' },
+        { name: '检车费' },
+        { name: '药品费' },
+        { name: '住院费' },
+      ]
+    },
+    {
+      name: '人情往来', icon: '🎁', children: [
+        { name: '红包礼金' },
+        { name: '礼品' },
+      ]
+    },
   ]
 }
 
-export const getCategoryIcon = (categoryName: string, type: 'income' | 'expense') => {
-  const categories = DEFAULT_CATEGORIES[type]
-  const category = categories.find(c => c.name === categoryName)
-  return category?.icon || '📌'
+function genId(): string {
+  return typeof crypto !== 'undefined' && (crypto as any).randomUUID
+    ? (crypto as any).randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
-export const getCategoryColor = (categoryName: string, type: 'income' | 'expense') => {
-  const categories = DEFAULT_CATEGORIES[type]
-  const category = (categories as any[]).find((c: any) => c.name === categoryName)
-  return (category as any)?.color || '#B4A7D6'
+export function buildDefaultCategoryRows(ledgerId: string): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+
+  function flatten(
+    nodes: CategoryNode[],
+    type: 'income' | 'expense',
+    level: number,
+    parentId: string | null
+  ) {
+    for (const node of nodes) {
+      const id = genId()
+      rows.push({
+        id,
+        ledger_id: ledgerId,
+        name: node.name,
+        icon: node.icon || '📌',
+        type,
+        parent_id: parentId,
+        level,
+      })
+      if (node.children && node.children.length > 0) {
+        flatten(node.children, type, level + 1, id)
+      }
+    }
+  }
+
+  flatten(DEFAULT_CATEGORIES.income, 'income', 1, null)
+  flatten(DEFAULT_CATEGORIES.expense, 'expense', 1, null)
+  return rows
 }

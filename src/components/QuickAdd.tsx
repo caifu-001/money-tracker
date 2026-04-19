@@ -40,12 +40,15 @@ export function QuickAdd() {
   const [selectedSub, setSelectedSub] = useState<any>(null) // 第三级
   const [loadingCats, setLoadingCats] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [date, setDate] = useState('')
 
   // 关闭时重置状态
   useEffect(() => {
     if (!isQuickAddOpen) {
       setCategory(''); setCategoryId('')
       setSelectedParent(null); setSelectedSub(null); setType('expense')
+      const t = new Date(); const y = t.getFullYear(); const m = String(t.getMonth()+1).padStart(2,'0'); const d = String(t.getDate()).padStart(2,'0')
+      setDate(''+y+'-'+m+'-'+d)
     }
   }, [isQuickAddOpen])
 
@@ -80,6 +83,12 @@ export function QuickAdd() {
     }
   }, [currentLedger, type])
 
+  // 初始化默认日期
+  useEffect(() => {
+    const t = new Date(); const y = t.getFullYear(); const m = String(t.getMonth()+1).padStart(2,'0'); const d = String(t.getDate()).padStart(2,'0')
+    setDate(''+y+'-'+m+'-'+d)
+  }, [])
+
   useEffect(() => {
     if (isQuickAddOpen && currentLedger) loadCats()
   }, [isQuickAddOpen, currentLedger, type, loadCats])
@@ -113,11 +122,6 @@ export function QuickAdd() {
     if (!amount || !categoryId) { alert('请填写金额并选择分类'); return }
     setIsLoading(true); setErrorMsg('')
     try {
-      // 北京时间
-      const now = new Date()
-      const beijingTime = new Date(now.getTime() + (8 * 60 + now.getTimezoneOffset()) * 60000)
-      const today = beijingTime.toISOString().split('T')[0]
-
       const result = await supabase.from('transactions').insert({
         ledger_id: currentLedger!.id,
         user_id: user?.id,
@@ -125,7 +129,7 @@ export function QuickAdd() {
         type,
         category,
         note,
-        date: today,
+        date,
         payment_method: paymentMethod,
       })
 
@@ -212,6 +216,13 @@ export function QuickAdd() {
                 placeholder="0.00" autoFocus
                 style={{ flex: 1, fontSize: 30, fontWeight: 900, background: 'transparent', border: 'none', outline: 'none', color: '#111', fontFamily: 'inherit' }}/>
             </div>
+          </div>
+
+          {/* 日期 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 14, background: '#f9f9f9' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>📅 日期</span>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)}
+              style={{ flex: 1, fontSize: 14, border: 'none', background: 'transparent', outline: 'none', color: '#374151', fontFamily: 'inherit' }}/>
           </div>
 
           {/* 分类 */}

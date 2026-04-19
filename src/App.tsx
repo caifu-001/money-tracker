@@ -110,12 +110,8 @@ function App() {
   const [showCreateLedger, setShowCreateLedger] = useState(false)
   const [newLedgerName, setNewLedgerName] = useState('')
   const [creatingLedger, setCreatingLedger] = useState(false)
-  // 协议弹窗（注册时强制查看）
-  const [showAgreementModal, setShowAgreementModal] = useState(false)
-  const [agreementType, setAgreementType] = useState<'agreement' | 'privacy'>('agreement')
-  const [agreementScrolled, setAgreementScrolled] = useState(false)
-  const modalScrollRef = useRef<HTMLDivElement>(null)
-  const [agreedAgreement, setAgreedAgreement] = useState(false)  // 注册时必须先同意协议
+  // 协议同意状态
+  const [agreedAgreement, setAgreedAgreement] = useState(false)
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -322,6 +318,14 @@ function App() {
     }
   }
 
+  // ─── 协议/隐私页面（无需登录即可查看） ───────────────────────────
+  if (currentPage === 'agreement') {
+    return <Agreement onBack={() => setCurrentPage('home')} />
+  }
+  if (currentPage === 'privacy') {
+    return <Privacy onBack={() => setCurrentPage('home')} />
+  }
+
   // ─── 登录/注册页面 ────────────────────────────────────────────────
   if (isAuthPage) {
     // 标题和副标题映射
@@ -480,32 +484,16 @@ function App() {
               {/* 协议勾选（注册页） */}
               {authMode === 'signup' && (
                 <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                  {/* 步骤一：勾选框 → 弹出协议 */}
+                  {/* 步骤一：勾选框 */}
                   <div style={{
                     display:'flex', alignItems:'flex-start', gap:'10px',
                     background: agreedAgreement ? '#f0fdf4' : '#fffbeb',
                     border: agreedAgreement ? '1.5px solid #bbf7d0' : '1.5px solid #fde68a',
-                    borderRadius:'12px', padding:'12px', cursor:'pointer'
-                  }}
-                    onClick={() => {
-                      if (!agreedAgreement) {
-                        setAgreementType('agreement')
-                        setAgreementScrolled(false)
-                        setShowAgreementModal(true)
-                      }
-                    }}>
+                    borderRadius:'12px', padding:'12px'
+                  }}>
                     <button
                       type="button"
-                      onClick={(e) => {
-                        if (!agreedAgreement) {
-                          e.stopPropagation()
-                          setAgreementType('agreement')
-                          setAgreementScrolled(false)
-                          setShowAgreementModal(true)
-                        } else {
-                          setAgreedAgreement(false)
-                        }
-                      }}
+                      onClick={() => setAgreedAgreement(!agreedAgreement)}
                       style={{
                         marginTop:'1px', flexShrink:0,
                         width:'22px', height:'22px',
@@ -525,26 +513,24 @@ function App() {
                       <div style={{ fontSize:'12px', color: agreedAgreement ? '#16a34a' : '#b45309', marginTop:'3px', lineHeight:'1.5' }}>
                         {agreedAgreement
                           ? '感谢您的信任，点击下方按钮完成注册'
-                          : '点击上方按钮查看完整协议，阅读后滑到底部点击确认'}
+                          : '点击下方链接查看协议，阅读后返回勾选'}
                       </div>
-                      {!agreedAgreement && (
-                        <div style={{ display:'flex', gap:'12px', marginTop:'8px' }}>
-                          <button type="button" onClick={() => { setAgreementType('agreement'); setAgreementScrolled(false); setShowAgreementModal(true) }}
-                            style={{ background:'none', border:'none', cursor:'pointer', color:'#d97706', fontSize:'12px', fontWeight:600, padding:'2px 0', textDecoration:'underline' }}>
-                            《用户协议》
-                          </button>
-                          <button type="button" onClick={() => { setAgreementType('privacy'); setAgreementScrolled(false); setShowAgreementModal(true) }}
-                            style={{ background:'none', border:'none', cursor:'pointer', color:'#d97706', fontSize:'12px', fontWeight:600, padding:'2px 0', textDecoration:'underline' }}>
-                            《隐私政策》
-                          </button>
-                        </div>
-                      )}
+                      <div style={{ display:'flex', gap:'12px', marginTop:'8px' }}>
+                        <button type="button" onClick={() => setCurrentPage('agreement')}
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#d97706', fontSize:'12px', fontWeight:600, padding:'2px 0', textDecoration:'underline' }}>
+                          《用户协议》
+                        </button>
+                        <button type="button" onClick={() => setCurrentPage('privacy')}
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#d97706', fontSize:'12px', fontWeight:600, padding:'2px 0', textDecoration:'underline' }}>
+                          《隐私政策》
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {/* 步骤二：阅读提示（未勾选时） */}
                   {!agreedAgreement && (
                     <div style={{ fontSize:'12px', color:'#ef4444', textAlign:'center', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'8px' }}>
-                      ⚠️ 请先点击上方黄色区域，阅读协议并确认后才能注册
+                      ⚠️ 请先阅读协议，返回后勾选同意才能注册
                     </div>
                   )}
                 </div>
@@ -583,7 +569,7 @@ function App() {
           </div>
 
           {/* 版本号 */}
-          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:'12px', marginTop:'4px' }}>游游记账 v3.0.3 · 游游工作室</p>
+          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:'12px', marginTop:'4px' }}>游游记账 v4.0.1 · 游游工作室</p>
           {/* 底部品牌 */}
           <p style={{ textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize:'12px', marginTop:'8px' }}>
             游游记账 · 智能记账
@@ -659,8 +645,6 @@ function App() {
         {currentPage === 'analytics'  && <Analytics />}
         {currentPage === 'categories' && <Categories />}
         {currentPage === 'admin'      && <Admin />}
-        {currentPage === 'agreement'  && <Agreement />}
-        {currentPage === 'privacy'     && <Privacy />}
       </div>
 
       {/* 新用户创建账本弹窗 */}
@@ -758,62 +742,6 @@ function App() {
 
       {/* 快速记账弹窗 */}
       <QuickAdd />
-
-      {/* 协议弹窗 */}
-      {showAgreementModal && (
-        <div style={{
-          position:'fixed',top:0,left:0,right:0,bottom:0,
-          background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',
-          zIndex:200
-        }}
-          onClick={() => setShowAgreementModal(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background:'white',borderRadius:'16px',width:'90%',maxWidth:'400px',
-            maxHeight:'80vh',display:'flex',flexDirection:'column',
-            boxShadow:'0 20px 50px rgba(0,0,0,0.3)'
-          }}>
-            <div style={{ padding:'16px 20px', borderBottom:'1px solid #f0f0f0', display:'flex',alignItems:'center',justifyContent:'space-between' }}>
-              <span style={{ fontSize:'15px',fontWeight:700,color:'#333' }}>
-                {agreementType === 'agreement' ? '📄 用户协议' : '🔒 隐私政策'}
-              </span>
-              <button onClick={() => setShowAgreementModal(false)}
-                style={{ background:'none',border:'none',cursor:'pointer',fontSize:'18px',color:'#999',padding:'0 4px' }}>
-                ✕
-              </button>
-            </div>
-            <div
-              ref={modalScrollRef}
-              onScroll={() => {
-                const el = modalScrollRef.current
-                if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
-                  setAgreementScrolled(true)
-                }
-              }}
-              style={{ flex:1,overflowY:'auto',padding:'20px',fontSize:'13px',color:'#4b5563',lineHeight:'1.8' }}
-            >
-              {agreementType === 'agreement'
-                ? <Agreement embedded={true} />
-                : <Privacy embedded={true} />
-              }
-            </div>
-            <div style={{ padding:'14px 20px 18px', borderTop:'1px solid #f0f0f0' }}>
-              {!agreementScrolled
-                ? <div style={{ width:'100%',padding:'12px',background:'#f5f5f5',borderRadius:'10px',textAlign:'center',color:'#aaa',fontSize:'13px' }}>
-                    ↕ 请滚动到最底部后确认
-                  </div>
-                : <button
-                    onClick={() => { setShowAgreementModal(false); setAgreedAgreement(true) }}
-                    style={{
-                      width:'100%',padding:'12px',border:'none',borderRadius:'10px',
-                      background:'#6366f1',color:'white',fontSize:'14px',fontWeight:600,cursor:'pointer'
-                    }}>
-                    我已阅读并同意
-                  </button>
-              }
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
