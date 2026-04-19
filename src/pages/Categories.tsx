@@ -50,24 +50,27 @@ export function Categories() {
     if (!currentLedger) return
     setIsLoading(true)
     try {
-      // 检查是否需要更新旧分类（缺少新版本特有分类则重建）
       const { data } = await supabase
         .from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
 
-      const needsUpdate = !data || data.length === 0 || !data.some((c: any) => c.name === '房贷月供' || c.name === '医疗' || c.name === '工具')
-      
-      if (needsUpdate) {
-        // 删除旧分类
-        if (data && data.length > 0) {
-          await supabase.from('categories').delete().eq('ledger_id', currentLedger.id)
-        }
-        // 初始化预置（含三级分类）
+      if (!data || data.length === 0) {
+        // 全新账本，初始化预置分类
         const rows = buildDefaultCategoryRows(currentLedger.id)
         await supabase.from('categories').insert(rows).then(r => { if (r.error) console.error(r.error) })
         const { data: fresh } = await supabase.from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
         apply(fresh || [])
       } else {
-        apply(data)
+        // 老账本：只追加缺失的预置分类，不删除用户自定义分类
+        const presetRows = buildDefaultCategoryRows(currentLedger.id)
+        const existingNames = new Set((data || []).map((c: any) => c.name))
+        const missingRows = presetRows.filter((r: any) => !existingNames.has(r.name))
+        if (missingRows.length > 0) {
+          await supabase.from('categories').insert(missingRows).then(r => { if (r.error) console.error(r.error) })
+          const { data: fresh } = await supabase.from('categories').select('*').eq('ledger_id', currentLedger.id).order('level')
+          apply(fresh || [])
+        } else {
+          apply(data)
+        }
       }
     } catch (e) { console.error(e) }
     finally { setIsLoading(false) }

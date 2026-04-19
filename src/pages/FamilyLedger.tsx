@@ -89,11 +89,21 @@ export function FamilyLedger() {
         setJoining(false); return
       }
 
-      // 加入账本
+      // 加入账本（role: editor 是数据库 CHECK 约束允许的值）
       const { error } = await supabase.from('ledger_members').insert([{
         ledger_id: matched.id, user_id: user.id, role: 'editor'
       }])
-      if (error) throw error
+      if (error) {
+        if (error.message?.includes('check constraint')) {
+          setJoinResult({ ok: false, msg: '加入失败：数据库角色约束不支持，请联系管理员检查 ledger_members 表约束' })
+          setJoining(false); return
+        }
+        if (error.message?.includes('foreign key')) {
+          setJoinResult({ ok: false, msg: '加入失败：用户账户信息不完整，请重新登录' })
+          setJoining(false); return
+        }
+        throw error
+      }
 
       setJoinResult({ ok: true, msg: `✅ 成功加入「${matched.name}」！` })
       setJoinCode('')
