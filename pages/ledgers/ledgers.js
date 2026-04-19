@@ -59,7 +59,7 @@ Page({
         supabase.from('ledger_members').select('ledger_id').eq('user_id', user.id)
       ])
       const memberIds = (memberResult.data || []).map(m => m.ledger_id)
-      let memberLedgers: any[] = []
+      let memberLedgers = []
       if (memberIds.length > 0) {
         const { data: ml } = await supabase.from('ledgers').select('*').in('id', memberIds)
         memberLedgers = ml || []
