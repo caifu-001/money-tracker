@@ -15,10 +15,28 @@ export function Ledgers() {
   const load = async () => {
     if (!user) return
     setIsLoading(true)
-    let query = supabase.from('ledgers').select('*').order('created_at', { ascending: false })
-    if (user.role !== 'admin') query = query.eq('owner_id', user.id)
-    const { data } = await query
-    setLedgers(data || [])
+    if (user.role === 'admin') {
+      const { data } = await supabase.from('ledgers').select('*').order('created_at', { ascending: false })
+      setLedgers(data || [])
+    } else {
+      // 自己的账本 + 作为成员的账本
+      const [ownResult, memberResult] = await Promise.all([
+        supabase.from('ledgers').select('*').eq('owner_id', user.id),
+        supabase.from('ledger_members').select('ledger_id').eq('user_id', user.id)
+      ])
+      const memberIds = (memberResult.data || []).map((m: any) => m.ledger_id)
+      let memberLedgers: any[] = []
+      if (memberIds.length > 0) {
+        const { data: ml } = await supabase.from('ledgers').select('*').in('id', memberIds)
+        memberLedgers = ml || []
+      }
+      // 合并去重，按创建时间排序
+      const map = new Map<string, any>()
+      ;[...(ownResult.data || []), ...memberLedgers].forEach(l => map.set(l.id, l))
+      setLedgers(Array.from(map.values()).sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ))
+    }
     setIsLoading(false)
   }
 
