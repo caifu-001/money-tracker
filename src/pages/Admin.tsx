@@ -504,11 +504,17 @@ export function Admin() {
   const [newLedgerName, setNewLedgerName] = useState('')
   const [newLedgerType, setNewLedgerType] = useState<'personal' | 'family' | 'project'>('personal')
   const [creating, setCreating] = useState(false)
+  const [autoApprove, setAutoApprove] = useState(false)
 
   const loadUsers = async () => {
     setIsLoading(true)
-    const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false })
-    setUsers((data || []) as any[]); setIsLoading(false)
+    const [{ data: usersData }, { data: settingData }] = await Promise.all([
+      supabase.from('users').select('*').order('created_at', { ascending: false }),
+      supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+    ])
+    setUsers((usersData || []) as any[])
+    setAutoApprove(settingData?.value === 'true')
+    setIsLoading(false)
   }
 
   const loadLedgers = async () => {
@@ -529,6 +535,13 @@ export function Admin() {
     if (error) { alert('操作失败：' + error.message); return }
     alert('操作成功')
     loadUsers()
+  }
+
+  const toggleAutoApprove = async () => {
+    const newVal = !autoApprove
+    const { error } = await supabase.from('app_settings').upsert([{ key: 'auto_approve', value: String(newVal) }])
+    if (error) { alert('设置失败：' + error.message); return }
+    setAutoApprove(newVal)
   }
 
   // 授权为管理员（仅超级管理员可操作）
@@ -813,6 +826,20 @@ export function Admin() {
       {/* ── 用户管理（仅管理员） ── */}
       {tab === 'users' && isAdmin && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {/* 自动通过开关 */}
+          <div style={{ background: autoApprove ? 'linear-gradient(135deg,#dcfce7,#bbf7d0)' : 'linear-gradient(135deg,#fef3c7,#fde68a)', borderRadius: 16, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: autoApprove ? '#16a34a' : '#ca8a04', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+              {autoApprove ? '🔓' : '🔒'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontWeight: 700, fontSize: 14, color: autoApprove ? '#15803d' : '#92400e' }}>新用户自动通过</p>
+              <p style={{ fontSize: 12, color: autoApprove ? '#166534' : '#a16207', marginTop: 2 }}>{autoApprove ? '新用户注册后自动激活，无需审核' : '新用户注册后需管理员手动审核'}</p>
+            </div>
+            <button onClick={toggleAutoApprove} style={{ width: 52, height: 28, borderRadius: 14, border: 'none', background: autoApprove ? '#6366f1' : '#d1d5db', cursor: 'pointer', position: 'relative', transition: 'background 0.3s', flexShrink: 0 }}>
+              <div style={{ width: 22, height: 22, borderRadius: 11, background: 'white', position: 'absolute', top: 3, left: autoApprove ? 27 : 3, transition: 'left 0.3s', boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }}/>
+            </button>
+          </div>
+
           {isLoading ? (
             <div style={{ textAlign: 'center', padding: 60 }}>
               <div style={{ width: 32, height: 32, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }}/>

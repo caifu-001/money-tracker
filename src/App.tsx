@@ -200,12 +200,31 @@ function App() {
         const result: any = await authService.verifyOtp(verifyEmail, verifyCode)
         if (result.error) throw new Error(result.error)
         
-        // 注册成功，自动登录
+        // 检查自动通过设置
+        const { data: settingData } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+        const autoApprove = settingData?.value === 'true'
+        if (!autoApprove) {
+          // 非自动通过，更新用户状态为 pending
+          const currentUser = await authService.getCurrentUser()
+          if (currentUser) {
+            await supabase.from('users').update({ status: 'pending' }).eq('id', currentUser.id)
+            await authService.signOut()
+          }
+          alert('注册成功！请等待管理员审核通过后即可登录使用。')
+          setAuthMode('login')
+          setLoginId(''); setPassword(''); setName(''); setVerifyCode(''); setVerifyEmail('')
+          setCaptchaKey(k => k + 1); setCaptchaValid(false)
+          return
+        }
+
+        // 自动通过，直接登录
         const { error: signInError } = await authService.signIn(verifyEmail, password)
         if (signInError) throw new Error('注册成功但自动登录失败，请手动登录')
         
         const currentUser = await authService.getCurrentUser()
         if (currentUser) {
+          // 确保用户状态为 active
+          await supabase.from('users').update({ status: 'active' }).eq('id', currentUser.id)
           await fetchUserAndLedger(currentUser, setUser, setCurrentLedger)
           // 检查是否有账本，如果没有则显示创建账本弹窗
           const { data: ledgers } = await supabase.from('ledgers').select('*').eq('owner_id', currentUser.id)
