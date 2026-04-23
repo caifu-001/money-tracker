@@ -3,6 +3,21 @@ import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
 import { Shield, Check, X, RotateCcw, Trash2 } from 'lucide-react'
 
+function getActivityInfo(lastLogin: string | null) {
+  if (!lastLogin) return { label: '从未登录', cls: 'zombie', days: Infinity }
+  const diff = (Date.now() - new Date(lastLogin).getTime()) / 86400000
+  if (diff <= 7)  return { label: '活跃', cls: 'online', days: diff }
+  if (diff <= 30) return { label: '偶尔', cls: 'active', days: diff }
+  if (diff <= 90) return { label: '一般', cls: 'normal', days: diff }
+  if (diff <= 180) return { label: '不活跃', cls: 'inactive', days: diff }
+  return { label: '僵尸', cls: 'zombie', days: diff }
+}
+
+function fmtDate(iso: string | null) {
+  if (!iso) return '—'
+  return iso.slice(0, 10)
+}
+
 export function UserManagement() {
   const { user } = useAppStore()
   const [users, setUsers] = useState<any[]>([])
@@ -200,8 +215,16 @@ export function UserManagement() {
                 <div className="flex-1">
                   <p className="font-semibold text-lg">{u.name || u.email}</p>
                   <p className="text-sm text-gray-500">{u.email}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-xs text-gray-400">
+                      注册：{fmtDate(u.created_at)}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      登录：{fmtDate(u.last_login)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col items-end gap-1">
                   <span className={`text-xs px-2 py-1 rounded font-medium ${
                     u.status === 'active'
                       ? 'bg-green-100 text-green-700'
@@ -216,6 +239,20 @@ export function UserManagement() {
                   }`}>
                     {u.role === 'admin' ? '管理员' : '普通用户'}
                   </span>
+                  {(() => {
+                    const act = getActivityInfo(u.last_login)
+                    return (
+                      <span className={`text-xs px-2 py-1 rounded font-bold ${
+                        act.cls === 'online' ? 'bg-green-100 text-green-700' :
+                        act.cls === 'active' ? 'bg-blue-100 text-blue-700' :
+                        act.cls === 'normal' ? 'bg-yellow-100 text-yellow-700' :
+                        act.cls === 'inactive' ? 'bg-orange-100 text-orange-700' :
+                        'bg-gray-100 text-gray-500'
+                      }`}>
+                        {act.label}
+                      </span>
+                    )
+                  })()}
                 </div>
               </div>
 
