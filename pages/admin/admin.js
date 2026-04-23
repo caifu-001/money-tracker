@@ -194,8 +194,13 @@ Page({
   async toggleAutoApprove() {
     const { autoApprove, user } = this.data
     const newVal = !autoApprove
-    const { error } = await supabase.from('app_settings').upsert([{ key: 'auto_approve', value: String(newVal) }], { onConflict: 'key' })
-    if (error) return wx.showToast({ title: error.message || '修改失败', icon: 'none' })
+    // 先尝试更新，不存在则插入（绕过 RLS 的 upsert 限制）
+    const { error: updateError } = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
+    if (updateError) {
+      // 更新失败（可能行不存在），尝试插入
+      const { error: insertError } = await supabase.from('app_settings').insert([{ key: 'auto_approve', value: String(newVal) }])
+      if (insertError) return wx.showToast({ title: insertError.message || '修改失败', icon: 'none' })
+    }
     this.setData({ autoApprove: newVal })
     wx.showToast({ title: newVal ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
   },
