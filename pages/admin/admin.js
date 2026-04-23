@@ -128,6 +128,7 @@ Page({
     const { data, error } = await supabase.from('users').select('id,name,email,role,status,created_at,last_login').order('created_at', { ascending: false })
     if (error) { console.error('loadUsers error:', error); wx.showToast({ title: '加载用户失败:' + error.message, icon: 'none', duration: 3000 }); return }
     console.log('[loadUsers] first user keys:', data?.[0] ? Object.keys(data[0]).join(', ') : 'empty')
+    if (data?.[0]) console.log('[loadUsers] first user created_at raw:', data[0].created_at, '| last_login raw:', data[0].last_login)
     // 计算活跃度
     const now = Date.now()
     const withActivity = (data || []).map(u => {

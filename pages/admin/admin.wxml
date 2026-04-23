@@ -126,9 +126,9 @@
 <text class="user-email">{{item.email || ''}}</text>
 </view>
 <view class="user-meta">
-<view class="user-date">{{item.created_at?item.created_at.slice(0,10):'-'}}</view>
+<view class="user-date">{{item.created_at?item.created_at.slice(0,10):'--无日期--'}}</view>
 <view class="activity-badge {{item.activityClass}}">{{item.activity}}</view>
-<view class="user-login">{{item.last_login?item.last_login.slice(0,10):'未登录'}}</view>
+<view class="user-login">{{item.last_login?item.last_login.slice(0,10):'--未登录--'}}</view>
 </view>
 <view class="user-status">
 <text class="status-tag {{item.status}}">{{item.status==='active'?'正常':item.status==='pending'?'待审核':'已禁用'}}</text>

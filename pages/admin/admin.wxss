@@ -134,11 +134,16 @@ page { background: #f0f2f7; }
   background: #fff; border-radius: 20rpx;
   padding: 24rpx 28rpx;
   display: flex; align-items: flex-start;
+  gap: 16rpx;
   box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06);
-  flex-wrap: wrap;
+  min-height: 120rpx;
 }
 .user-info { flex: 1; min-width: 0; }
-.user-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; flex-shrink: 0; }
+.user-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx;
+  width: 180rpx; flex-shrink: 0;
+  background: #f0f9ff; border: 2rpx solid #ddd; border-radius: 12rpx; padding: 10rpx 14rpx;
+}
 .user-date { font-size: 20rpx; color: #bbb; white-space: nowrap; }
 .user-login { font-size: 18rpx; color: #ccc; white-space: nowrap; }
 .user-name { display: block; font-size: 28rpx; color: #1f2937; font-weight: 600; }
