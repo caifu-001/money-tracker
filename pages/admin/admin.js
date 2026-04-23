@@ -82,14 +82,15 @@ Page({
   async loadData() {
     const { tab, user } = this.data
     if (!user) { this.setData({ loading: false }); return }
-    
+
     this.setData({ loading: true })
     if (tab === 'family') {
       await this.loadMembers()
       await this.loadMyLedgers()
     } else if (tab === 'ledgers') {
       await this.loadLedgers()
-    } else if (tab === 'users' && (user.role === 'admin' || user.role === 'manager')) {
+    }
+    if (tab === 'users' && (user.role === 'admin' || user.role === 'manager')) {
       await this.loadUsers()
       await this.loadAutoApprove()
     }
@@ -124,8 +125,26 @@ Page({
   },
 
   async loadUsers() {
-    const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false })
-    this.setData({ users: data || [] })
+    const { data, error } = await supabase.from('users').select('id,name,email,role,status,created_at,last_login').order('created_at', { ascending: false })
+    if (error) { console.error('loadUsers error:', error); wx.showToast({ title: '加载用户失败:' + error.message, icon: 'none', duration: 3000 }); return }
+    console.log('[loadUsers] first user keys:', data?.[0] ? Object.keys(data[0]).join(', ') : 'empty')
+    // 计算活跃度
+    const now = Date.now()
+    const withActivity = (data || []).map(u => {
+      let activity = '从未登录'
+      let activityClass = 'zombie'
+      if (u.last_login) {
+        const diff = now - new Date(u.last_login).getTime()
+        const days = Math.floor(diff / 86400000)
+        if (days <= 7)  { activity = '在线';    activityClass = 'online' }
+        else if (days <= 30) { activity = '活跃';   activityClass = 'active' }
+        else if (days <= 90) { activity = '一般';   activityClass = 'normal' }
+        else if (days <= 180){ activity = '不活跃'; activityClass = 'inactive' }
+        else               { activity = '僵尸';   activityClass = 'zombie' }
+      }
+      return { ...u, activity, activityClass }
+    })
+    this.setData({ users: withActivity })
   },
 
   async loadAutoApprove() {

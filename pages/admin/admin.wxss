@@ -133,14 +133,26 @@ page { background: #f0f2f7; }
 .user-item {
   background: #fff; border-radius: 20rpx;
   padding: 24rpx 28rpx;
-  display: flex; align-items: center;
+  display: flex; align-items: flex-start;
   box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06);
+  flex-wrap: wrap;
 }
-.user-info { flex: 1; }
-.user-date { font-size: 22rpx; color: #aaa; margin-right: 12rpx; white-space: nowrap; min-width: 120rpx; }
+.user-info { flex: 1; min-width: 0; }
+.user-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx; flex-shrink: 0; }
+.user-date { font-size: 20rpx; color: #bbb; white-space: nowrap; }
+.user-login { font-size: 18rpx; color: #ccc; white-space: nowrap; }
 .user-name { display: block; font-size: 28rpx; color: #1f2937; font-weight: 600; }
 .user-email { display: block; font-size: 22rpx; color: #9ca3af; margin-top: 4rpx; }
 .user-status { margin-right: 16rpx; }
+.activity-badge {
+  font-size: 18rpx; font-weight: 700; padding: 4rpx 14rpx;
+  border-radius: 20rpx; white-space: nowrap;
+}
+.activity-badge.online    { background: #d1fae5; color: #059669; }
+.activity-badge.active   { background: #dbeafe; color: #2563eb; }
+.activity-badge.normal   { background: #fef3c7; color: #d97706; }
+.activity-badge.inactive { background: #fee2e2; color: #f97316; }
+.activity-badge.zombie   { background: #f3f4f6; color: #9ca3af; }
 .status-tag { font-size: 20rpx; padding: 6rpx 16rpx; border-radius: 20rpx; font-weight: 500; }
 .status-tag.active { background: #d1fae5; color: #059669; }
 .status-tag.pending { background: #fef3c7; color: #d97706; }

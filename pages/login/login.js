@@ -69,6 +69,23 @@ Page({
     cb(cachedUser)  // 查询失败则用缓存（网络问题等）
   },
 
+    // 更新用户最后登录时间（调用 Edge Function）
+  async _updateLastLogin(userId) {
+    try {
+      const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MTI1NDIsImV4cCI6MjA4OTk4ODU0Mn0.eoAm3WjrCYPyuw2JB6M2QUe5QSyP4GkMGg2Buj57fb4'
+      await new Promise((resolve) => {
+        wx.request({
+          url: SUPABASE_URL + '/functions/v1/update-last-login',
+          method: 'POST',
+          header: { 'Content-Type': 'application/json', 'apikey': ANON, 'Authorization': 'Bearer ' + ANON },
+          data: { user_id: userId },
+          success: r => resolve(r),
+          fail: () => resolve(null)
+        })
+      })
+    } catch(e) {}
+  },
+
   // 微信静默登录
   async tryWechatLogin() {
     try {
@@ -113,6 +130,7 @@ Page({
         }
         // 自动登录成功
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
+        this._updateLastLogin(user.id)
         let ledger = null
         // 查询 own + member 账本
         const [ownRes, memberRes] = await Promise.all([
@@ -189,6 +207,7 @@ Page({
       if (autoApprove) {
         // 自动通过，直接登录
         const user = { id: authData.user.id, email, name, role: 'user' }
+        this._updateLastLogin(user.id)
         app.onLoginSuccess(user, null)
         wx.switchTab({ url: '/pages/home/home' })
       } else {
@@ -406,6 +425,7 @@ Page({
       }
 
       const user = { id: data.user.id, email: data.user.email, name: (userData && userData.name) || loginId, role: (userData && userData.role) || 'user' }
+      this._updateLastLogin(user.id)
       const { data: ledgers } = await supabase.from('ledgers').select('*').eq('owner_id', data.user.id).order('created_at')
       let ledger = null
       if (ledgers && ledgers.length > 0) {
