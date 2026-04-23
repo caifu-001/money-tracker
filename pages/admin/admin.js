@@ -249,7 +249,7 @@ Page({
   goAbout() {
     wx.showModal({
       title: '游游记账',
-      content: '版本：v4.0.1\n\n一款简洁的家庭记账工具\n支持多账本、预算管理、数据分析\n\n© 2026 游游记账团队',
+      content: '版本：v4.0.4\n\n一款简洁的家庭记账工具\n支持多账本、预算管理、数据分析\n\n© 2026 游游记账团队',
       showCancel: false
     })
   },
