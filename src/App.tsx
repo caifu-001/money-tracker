@@ -588,7 +588,7 @@ function App() {
           </div>
 
           {/* 版本号 */}
-          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:'12px', marginTop:'4px' }}>游游记账 v4.0.1 · 游游工作室</p>
+          <p style={{ textAlign:'center', color:'rgba(255,255,255,0.45)', fontSize:'12px', marginTop:'4px' }}>游游记账 v4.0.4 · 游游工作室</p>
           {/* 底部品牌 */}
           <p style={{ textAlign:'center', color:'rgba(255,255,255,0.5)', fontSize:'12px', marginTop:'8px' }}>
             游游记账 · 智能记账
