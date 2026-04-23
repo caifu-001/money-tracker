@@ -128,8 +128,13 @@ Page({
     const { data, error } = await supabase.from('users').select('id,name,email,role,status,created_at,last_login').order('created_at', { ascending: false })
     if (error) { console.error('loadUsers error:', error); wx.showToast({ title: '加载用户失败:' + error.message, icon: 'none', duration: 3000 }); return }
     console.log('[loadUsers] users count:', data?.length || 0)
-    console.log('[loadUsers] first user keys:', data?.[0] ? Object.keys(data[0]).join(', ') : 'empty')
-    if (data?.[0]) console.log('[loadUsers] first user:', JSON.stringify(data[0]))
+    if (data?.[0]) {
+      console.log('[loadUsers] first user keys:', Object.keys(data[0]).join(', '))
+      console.log('[loadUsers] first user created_at:', data[0].created_at)
+      console.log('[loadUsers] first user last_login:', data[0].last_login)
+      console.log('[loadUsers] first user status:', data[0].status)
+      console.log('[loadUsers] first user role:', data[0].role)
+    }
     // 计算活跃度
     const now = Date.now()
     const withActivity = (data || []).map(u => {
@@ -146,12 +151,29 @@ Page({
       }
       return { ...u, activity, activityClass }
     })
+    console.log('[loadUsers] setting users:', withActivity.length)
+    if (withActivity[0]) {
+      console.log('[loadUsers] first user activity:', withActivity[0].activity)
+      console.log('[loadUsers] first user activityClass:', withActivity[0].activityClass)
+    }
     this.setData({ users: withActivity })
   },
 
   async loadAutoApprove() {
-    const { data } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
-    this.setData({ autoApprove: data?.value === 'true' })
+    try {
+      const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+      if (error) {
+        console.log('[loadAutoApprove] error:', error.message)
+        // 如果查询失败（可能是RLS或行不存在），默认关闭
+        this.setData({ autoApprove: false })
+        return
+      }
+      console.log('[loadAutoApprove] value:', data?.value)
+      this.setData({ autoApprove: data?.value === 'true' })
+    } catch (e) {
+      console.log('[loadAutoApprove] catch:', e)
+      this.setData({ autoApprove: false })
+    }
   },
 
   copyInviteCode() {
@@ -195,12 +217,18 @@ Page({
   async toggleAutoApprove() {
     const { autoApprove, user } = this.data
     const newVal = !autoApprove
+    console.log('[toggleAutoApprove] current:', autoApprove, 'new:', newVal)
     // 先尝试更新，不存在则插入（绕过 RLS 的 upsert 限制）
     const { error: updateError } = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
+    console.log('[toggleAutoApprove] update error:', updateError?.message || 'none')
     if (updateError) {
       // 更新失败（可能行不存在），尝试插入
       const { error: insertError } = await supabase.from('app_settings').insert([{ key: 'auto_approve', value: String(newVal) }])
-      if (insertError) return wx.showToast({ title: insertError.message || '修改失败', icon: 'none' })
+      console.log('[toggleAutoApprove] insert error:', insertError?.message || 'none')
+      if (insertError) {
+        wx.showToast({ title: insertError.message || '修改失败', icon: 'none' })
+        return
+      }
     }
     this.setData({ autoApprove: newVal })
     wx.showToast({ title: newVal ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
