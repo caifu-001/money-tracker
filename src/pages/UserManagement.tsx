@@ -215,44 +215,42 @@ export function UserManagement() {
                 <div className="flex-1">
                   <p className="font-semibold text-lg">{u.name || u.email}</p>
                   <p className="text-sm text-gray-500">{u.email}</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs text-gray-400">
+          <div className="flex items-center gap-3 mt-2">
+                    <span className="text-xs text-gray-500">
                       注册：{fmtDate(u.created_at)}
                     </span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                      u.status === 'active'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {u.status === 'active' ? '已激活' : '待审核'}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                      u.role === 'admin'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {u.role === 'admin' ? '管理员' : '普通用户'}
+                    </span>
+                    {(() => {
+                      const act = getActivityInfo(u.last_login)
+                      return (
+                        <span className={`text-xs px-2 py-0.5 rounded font-bold ${
+                          act.cls === 'online' ? 'bg-green-100 text-green-700' :
+                          act.cls === 'active' ? 'bg-blue-100 text-blue-700' :
+                          act.cls === 'normal' ? 'bg-yellow-100 text-yellow-700' :
+                          act.cls === 'inactive' ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>
+                          {act.label}
+                        </span>
+                      )
+                    })()}
                     <span className="text-xs text-gray-400">
                       登录：{fmtDate(u.last_login)}
                     </span>
                   </div>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className={`text-xs px-2 py-1 rounded font-medium ${
-                    u.status === 'active'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-yellow-100 text-yellow-700'
-                  }`}>
-                    {u.status === 'active' ? '已激活' : '待审核'}
-                  </span>
-                  <span className={`text-xs px-2 py-1 rounded font-medium ${
-                    u.role === 'admin'
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {u.role === 'admin' ? '管理员' : '普通用户'}
-                  </span>
-                  {(() => {
-                    const act = getActivityInfo(u.last_login)
-                    return (
-                      <span className={`text-xs px-2 py-1 rounded font-bold ${
-                        act.cls === 'online' ? 'bg-green-100 text-green-700' :
-                        act.cls === 'active' ? 'bg-blue-100 text-blue-700' :
-                        act.cls === 'normal' ? 'bg-yellow-100 text-yellow-700' :
-                        act.cls === 'inactive' ? 'bg-orange-100 text-orange-700' :
-                        'bg-gray-100 text-gray-500'
-                      }`}>
-                        {act.label}
-                      </span>
-                    )
-                  })()}
                 </div>
               </div>
 
