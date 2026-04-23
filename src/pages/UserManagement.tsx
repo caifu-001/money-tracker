@@ -213,30 +213,50 @@ export function UserManagement() {
             const act = getActivityInfo(u.last_login)
             return (
               <div key={u.id} className="bg-white p-4 rounded-lg border border-gray-200">
-                {/* 第一行：用户名 + 状态徽章 + 活跃度 */}
+                {/* 第一行：用户名 + 状态徽章 + 角色 + 活跃度 */}
                 <div className="flex items-center gap-3 mb-2">
                   <span className="font-semibold text-lg">{u.name || u.email}</span>
-                  <span className={`text-xs px-2 py-1 rounded font-semibold ${
-                    u.status === 'active'
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-yellow-100 text-yellow-700'
-                  }`}>
+                  {/* 状态徽章 - 内联样式确保可见 */}
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    backgroundColor: u.status === 'active' ? '#dcfce7' : '#fef3c7',
+                    color: u.status === 'active' ? '#15803d' : '#a16207'
+                  }}>
                     {u.status === 'active' ? '正常' : '待审核'}
                   </span>
-                  <span className={`text-xs px-2 py-1 rounded font-semibold ${
-                    u.role === 'admin'
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
+                  {/* 角色徽章 */}
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 600,
+                    backgroundColor: u.role === 'admin' ? '#f3e8ff' : '#dbeafe',
+                    color: u.role === 'admin' ? '#7c3aed' : '#1d4ed8'
+                  }}>
                     {u.role === 'admin' ? '管理员' : '普通用户'}
                   </span>
-                  <span className={`text-xs px-2 py-1 rounded font-bold ${
-                    act.cls === 'online' ? 'bg-green-100 text-green-700' :
-                    act.cls === 'active' ? 'bg-blue-100 text-blue-700' :
-                    act.cls === 'normal' ? 'bg-yellow-100 text-yellow-700' :
-                    act.cls === 'inactive' ? 'bg-orange-100 text-orange-700' :
-                    'bg-gray-100 text-gray-500'
-                  }`}>
+                  {/* 活跃度徽章 */}
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    fontWeight: 700,
+                    backgroundColor: 
+                      act.cls === 'online' ? '#dcfce7' :
+                      act.cls === 'active' ? '#dbeafe' :
+                      act.cls === 'normal' ? '#fef3c7' :
+                      act.cls === 'inactive' ? '#ffedd5' :
+                      '#f3f4f6',
+                    color: 
+                      act.cls === 'online' ? '#15803d' :
+                      act.cls === 'active' ? '#1d4ed8' :
+                      act.cls === 'normal' ? '#a16207' :
+                      act.cls === 'inactive' ? '#c2410c' :
+                      '#6b7280'
+                  }}>
                     {act.label}
                   </span>
                 </div>
@@ -245,9 +265,9 @@ export function UserManagement() {
                 <div className="text-sm text-gray-500 mb-2">{u.email}</div>
 
                 {/* 第三行：注册时间 + 最后登录 */}
-                <div className="flex items-center gap-4 text-xs text-gray-400 mb-3">
-                  <span>注册: {fmtDate(u.created_at)}</span>
-                  <span>登录: {fmtDate(u.last_login)}</span>
+                <div className="flex items-center gap-4 mb-3">
+                  <span style={{ fontSize: '13px', color: '#6b7280' }}>注册: {fmtDate(u.created_at)}</span>
+                  <span style={{ fontSize: '13px', color: '#6b7280' }}>登录: {fmtDate(u.last_login)}</span>
                 </div>
 
                 {/* 操作按钮 */}
