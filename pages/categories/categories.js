@@ -1,65 +1,56 @@
 // pages/categories/categories.js
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
-const { DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } = require('../../utils/categories')
+const { initDefaultCategories } = require('../../utils/categories')
 
 Page({
   data: {
-    loading: true,
     user: null,
+    isGuest: true,
     currentLedger: null,
-    // 预置类别（从 system_config 读取，管理员修改后实时生效）
-    expensePresets: [],
-    incomePresets: [],
-    // 自定义类别（DB 中的树形结构）
+    loading: false,
     expenseCats: [],
     incomeCats: [],
-    // 新增表单
-    showForm: false,
-    formType: 'expense',
-    formName: '',
-    formIcon: '📌',
-    // 子类别内联表单
-    inlineParentId: null,
-    inlineParentName: '',
-    inlineName: '',
-    inlineIcon: '📌',
-    // 展开状态
-    expandedIds: [],
-    // 编辑
-    editId: null,
+    type: 'expense',
+    // 编辑弹窗
+    showEdit: false,
+    editCat: null,
     editName: '',
     editIcon: '',
+    editParentId: null,
+    // 新增弹窗
+    showAdd: false,
+    addName: '',
+    addIcon: '',
+    addParentId: null,
   },
 
   onLoad() {
     const user = app.globalData.user
-    if (!user) return wx.reLaunch({ url: '/pages/login/login' })
-    this.setData({ user, currentLedger: app.globalData.currentLedger })
-    this.loadSystemPresets()
-    this.loadCategories()
+    this.setData({ 
+      user: user || null, 
+      isGuest: !user,
+      currentLedger: app.globalData.currentLedger 
+    })
+    if (user) this.loadCategories()
   },
 
-  // 从 system_config 加载预置类别（管理员修改后实时生效）
-  async loadSystemPresets() {
-    try {
-      const { data } = await supabase.from('system_config').select('key,value')
-      if (data) {
-        const map = {}
-        data.forEach(row => { map[row.key] = row.value })
-        this.setData({
-          expensePresets: map['default_expense_categories'] || DEFAULT_EXPENSE_CATEGORIES,
-          incomePresets:  map['default_income_categories']  || DEFAULT_INCOME_CATEGORIES,
-        })
-      } else {
-        this.setData({ expensePresets: DEFAULT_EXPENSE_CATEGORIES, incomePresets: DEFAULT_INCOME_CATEGORIES })
-      }
-    } catch(e) {
-      this.setData({ expensePresets: DEFAULT_EXPENSE_CATEGORIES, incomePresets: DEFAULT_INCOME_CATEGORIES })
+  onShow() {
+    // 刷新用户状态
+    const user = app.globalData.user
+    this.setData({ user: user || null, isGuest: !user })
+    
+    const currentLedger = app.globalData.currentLedger
+    if (currentLedger && currentLedger.id !== this.data.currentLedger?.id) {
+      this.setData({ currentLedger })
+      if (user) this.loadCategories()
     }
   },
 
-  // 加载自定义类别（DB）
+  goLogin() {
+    wx.navigateTo({ url: '/pages/login/login' })
+  },
+
   async loadCategories() {
     const { currentLedger } = this.data
     if (!currentLedger) { this.setData({ loading: false }); return }
@@ -67,123 +58,160 @@ Page({
     const { data } = await supabase.from('categories').select('id,name,icon,type,parent_id,level')
       .eq('ledger_id', currentLedger.id).order('level').order('name')
 
+    if (!data || data.length === 0) {
+      await initDefaultCategories(supabase, currentLedger.id)
+      const { data: retry } = await supabase.from('categories').select('id,name,icon,type,parent_id,level')
+        .eq('ledger_id', currentLedger.id).order('level').order('name')
+      this._applyData(retry || [])
+      return
+    }
+
+    this._applyData(data)
+  },
+
+  _applyData(data) {
     const map = {}; const roots = []
     ;(data||[]).forEach(c => { map[c.id] = {...c, children: []} })
     ;(data||[]).forEach(c => {
       if (c.parent_id && map[c.parent_id]) map[c.parent_id].children.push(map[c.id])
       else if (!c.parent_id) roots.push(map[c.id])
     })
+    const addExpanded = (nodes) => nodes.map(n => ({...n, expanded: false, children: n.children ? addExpanded(n.children) : []}))
     this.setData({
-      expenseCats: roots.filter(c => c.type === 'expense'),
-      incomeCats:  roots.filter(c => c.type === 'income'),
+      expenseCats: addExpanded(roots.filter(c => c.type === 'expense')),
+      incomeCats:  addExpanded(roots.filter(c => c.type === 'income')),
       loading: false
     })
   },
 
-  // 添加顶级类别
-  async handleAddTop() {
-    const { formName, formIcon, formType, currentLedger } = this.data
-    if (!formName.trim()) return wx.showToast({ title: '请输入类别名称', icon: 'none' })
+  setType(e) {
+    this.setData({ type: e.currentTarget.dataset.type })
+  },
+
+  toggleExpand(e) {
+    const { id } = e.currentTarget.dataset
+    const updateNode = (nodes) => nodes.map(n => {
+      if (n.id === id) return {...n, expanded: !n.expanded}
+      if (n.children) return {...n, children: updateNode(n.children)}
+      return n
+    })
+    if (this.data.type === 'expense') {
+      this.setData({ expenseCats: updateNode(this.data.expenseCats) })
+    } else {
+      this.setData({ incomeCats: updateNode(this.data.incomeCats) })
+    }
+  },
+
+  openAdd(e) {
+    if (!this.data.user) {
+      wx.showModal({ title: '请先登录', content: '登录后即可管理分类', confirmText: '去登录', success: (r) => { if (r.confirm) this.goLogin() } })
+      return
+    }
+    const parentId = e.currentTarget.dataset.parent || null
+    this.setData({ showAdd: true, addName: '', addIcon: '📌', addParentId: parentId })
+  },
+
+  closeAdd() { this.setData({ showAdd: false }) },
+  onAddNameInput(e) { this.setData({ addName: e.detail.value }) },
+  onAddIconInput(e) { this.setData({ addIcon: e.detail.value }) },
+
+  async handleAdd() {
+    const { addName, addIcon, addParentId, type, currentLedger } = this.data
+    if (!addName.trim()) return wx.showToast({ title: '请输入分类名称', icon: 'none' })
+    
+    // 查重：同级不能重名
+    const siblings = addParentId 
+      ? this._getChildren(addParentId) 
+      : (type === 'expense' ? this.data.expenseCats : this.data.incomeCats)
+    if (siblings.some(s => s.name === addName.trim())) {
+      return wx.showToast({ title: '该分类名称已存在', icon: 'none' })
+    }
+
+    // 计算层级
+    let level = 1
+    if (addParentId) {
+      const parent = this._findNode(addParentId)
+      if (parent) level = parent.level + 1
+    }
+
     const { error } = await supabase.from('categories').insert([{
-      ledger_id: currentLedger.id, name: formName, icon: formIcon,
-      type: formType, parent_id: null, level: 1
+      ledger_id: currentLedger.id,
+      name: addName.trim(),
+      icon: addIcon || '📌',
+      type,
+      parent_id: addParentId,
+      level
     }])
-    if (error) return wx.showToast({ title: error.message, icon: 'none' })
-    this.setData({ showForm: false, formName: '', formIcon: '📌' })
+    if (error) return wx.showToast({ title: error.message || '添加失败', icon: 'none' })
+    this.setData({ showAdd: false })
+    wx.showToast({ title: '添加成功', icon: 'success' })
     this.loadCategories()
   },
 
-  // 添加子类别
-  async handleAddChild() {
-    const { inlineParentId, inlineName, inlineIcon, currentLedger, expenseCats, incomeCats } = this.data
-    if (!inlineName.trim()) return wx.showToast({ title: '请输入类别名称', icon: 'none' })
-    // 找父级 level
-    const findLevel = (cats, id) => {
-      for (const c of cats) {
-        if (c.id === id) return c.level
-        if (c.children) { const f = findLevel(c.children, id); if (f > 0) return f }
+  _getChildren(parentId) {
+    const find = (nodes) => {
+      for (const n of nodes) {
+        if (n.id === parentId) return n.children || []
+        if (n.children) {
+          const found = find(n.children)
+          if (found) return found
+        }
       }
-      return 0
+      return []
     }
-    const parentLevel = findLevel([...expenseCats, ...incomeCats], inlineParentId)
-    if (parentLevel >= 5) return wx.showToast({ title: '最多5级子类别', icon: 'none' })
+    return find(this.data.type === 'expense' ? this.data.expenseCats : this.data.incomeCats)
+  },
 
-    // 找父级 type
-    const findType = (cats, id) => {
-      for (const c of cats) {
-        if (c.id === id) return c.type
-        if (c.children) { const f = findType(c.children, id); if (f) return f }
+  _findNode(id) {
+    const find = (nodes) => {
+      for (const n of nodes) {
+        if (n.id === id) return n
+        if (n.children) {
+          const found = find(n.children)
+          if (found) return found
+        }
       }
       return null
     }
-    const parentType = findType([...expenseCats, ...incomeCats], inlineParentId)
-
-    const { error } = await supabase.from('categories').insert([{
-      ledger_id: currentLedger.id, name: inlineName, icon: inlineIcon,
-      type: parentType, parent_id: inlineParentId, level: parentLevel + 1
-    }])
-    if (error) return wx.showToast({ title: error.message, icon: 'none' })
-    this.setData({ inlineParentId: null, inlineParentName: '', inlineName: '', inlineIcon: '📌' })
-    this.loadCategories()
+    return find(this.data.type === 'expense' ? this.data.expenseCats : this.data.incomeCats)
   },
 
-  // 编辑类别
-  async handleEdit() {
-    const { editId, editName, editIcon } = this.data
-    if (!editName.trim()) return wx.showToast({ title: '名称不能为空', icon: 'none' })
-    const { error } = await supabase.from('categories').update({ name: editName, icon: editIcon }).eq('id', editId)
-    if (error) return wx.showToast({ title: error.message, icon: 'none' })
-    this.setData({ editId: null })
-    this.loadCategories()
-  },
-
-  // 删除类别
-  onDeleteTap(e) {
-    const id = e.currentTarget.dataset.id
-    wx.showModal({ title: '确认删除', content: '子类别也会一并删除', success: async res => {
-      if (!res.confirm) return
-      const del = async (cid) => {
-        const { data: ch } = await supabase.from('categories').select('id').eq('parent_id', cid)
-        if (ch) for (const c of ch) await del(c.id)
-        await supabase.from('categories').delete().eq('id', cid)
-      }
-      await del(id)
-      this.loadCategories()
-    }})
-  },
-
-  // 展开/折叠
-  toggleExpand(e) {
-    const id = e.currentTarget.dataset.id
-    const { expandedIds } = this.data
-    if (expandedIds.includes(id)) {
-      this.setData({ expandedIds: expandedIds.filter(x => x !== id) })
-    } else {
-      this.setData({ expandedIds: [...expandedIds, id] })
-    }
-  },
-
-  // 内联子类别表单
-  openInlineForm(e) {
-    const { id, name } = e.currentTarget.dataset
-    this.setData({ inlineParentId: id, inlineParentName: name, inlineName: '', inlineIcon: '📌', expandedIds: [...this.data.expandedIds, id] })
-  },
-  closeInlineForm() { this.setData({ inlineParentId: null }) },
-
-  // 编辑表单
   openEdit(e) {
-    const { id, name, icon } = e.currentTarget.dataset
-    this.setData({ editId: id, editName: name, editIcon: icon })
+    if (!this.data.user) {
+      wx.showModal({ title: '请先登录', content: '登录后即可管理分类', confirmText: '去登录', success: (r) => { if (r.confirm) this.goLogin() } })
+      return
+    }
+    const cat = e.currentTarget.dataset.cat
+    this.setData({ showEdit: true, editCat: cat, editName: cat.name, editIcon: cat.icon, editParentId: cat.parent_id })
   },
-  closeEdit() { this.setData({ editId: null }) },
 
-  // 表单输入
-  onFormNameInput(e)   { this.setData({ formName: e.detail.value }) },
-  onFormIconInput(e)   { this.setData({ formIcon: e.detail.value }) },
-  onInlineNameInput(e) { this.setData({ inlineName: e.detail.value }) },
-  onInlineIconInput(e) { this.setData({ inlineIcon: e.detail.value }) },
-  onEditNameInput(e)   { this.setData({ editName: e.detail.value }) },
-  onEditIconInput(e)   { this.setData({ editIcon: e.detail.value }) },
-  setFormType(e)       { this.setData({ formType: e.currentTarget.dataset.type }) },
-  toggleForm()         { this.setData({ showForm: !this.data.showForm, formName: '', formIcon: '📌' }) },
+  closeEdit() { this.setData({ showEdit: false }) },
+  onEditNameInput(e) { this.setData({ editName: e.detail.value }) },
+  onEditIconInput(e) { this.setData({ editIcon: e.detail.value }) },
+
+  async handleEdit() {
+    const { editCat, editName, editIcon } = this.data
+    if (!editName.trim()) return wx.showToast({ title: '请输入分类名称', icon: 'none' })
+    const { error } = await supabase.from('categories').update({ name: editName.trim(), icon: editIcon || '📌' }).eq('id', editCat.id)
+    if (error) return wx.showToast({ title: error.message || '修改失败', icon: 'none' })
+    this.setData({ showEdit: false })
+    wx.showToast({ title: '修改成功', icon: 'success' })
+    this.loadCategories()
+  },
+
+  async handleDelete() {
+    const { editCat } = this.data
+    wx.showModal({
+      title: '确认删除',
+      content: '删除后无法恢复，确定删除该分类吗？',
+      success: async (res) => {
+        if (!res.confirm) return
+        const { error } = await supabase.from('categories').delete().eq('id', editCat.id)
+        if (error) return wx.showToast({ title: error.message || '删除失败', icon: 'none' })
+        this.setData({ showEdit: false })
+        wx.showToast({ title: '删除成功', icon: 'success' })
+        this.loadCategories()
+      }
+    })
+  },
 })

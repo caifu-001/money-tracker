@@ -1,116 +1,161 @@
-<!--pages/admin/admin.wxml-->
 <view class="page">
-  <!-- 顶部标题 -->
-  <view class="header">
-    <text class="page-title">🛡️ 管理后台</text>
-    <text class="user-info">👤 {{user.name}} ({{user.role}})</text>
-  </view>
-
-  <!-- Tab 切换 -->
-  <view class="tab-bar">
-    <view class="tab {{tab==='users'?'active':''}}" bindtap="setTab" data-tab="users">👥 用户管理</view>
-    <view class="tab {{tab==='ledgers'?'active':''}}" bindtap="setTab" data-tab="ledgers">📚 账本管理</view>
-  </view>
-
-  <!-- 同步按钮（仅用户 Tab） -->
-  <button class="sync-btn" bindtap="handleSync" wx:if="{{tab==='users'}}">
-    🔄 同步用户数据
-  </button>
-
-  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
-
-  <!-- ── 用户列表 ── -->
-  <block wx:if="{{tab==='users' && !loading}}">
-    <view class="section-title">全部用户 ({{users.length}})</view>
-    <view class="user-list">
-      <view class="user-item" wx:for="{{users}}" wx:key="id">
-        <view class="ui-left">
-          <text class="ui-avatar">{{item.name.charAt(0)||'?'}}</text>
-          <view class="ui-info">
-            <text class="ui-name">{{item.name}}</text>
-            <text class="ui-email">{{item.email}}</text>
-          </view>
-        </view>
-        <view class="ui-right">
-          <!-- 状态标签 -->
-          <text class="status-badge {{item.status==='active'?'active':item.status==='pending'?'pending':'disabled'}}">
-            {{item.status==='active'?'已激活':item.status==='pending'?'待审核':'已禁用'}}
-          </text>
-          <!-- 角色 -->
-          <text class="role-badge {{item.role==='admin'?'admin':'user'}}">
-            {{item.role==='admin'?'管理员':'普通用户'}}
-          </text>
-        </view>
-        <view class="ui-actions">
-          <!-- pending 用户 → 审核通过 -->
-          <button class="action-btn approve" wx:if="{{item.status==='pending'}}" bindtap="openApprove" data-id="{{item.id}}" data-name="{{item.name}}">
-            ✅ 审核
-          </button>
-          <!-- active 用户 → 禁用 -->
-          <button class="action-btn disable" wx:if="{{item.status==='active'}}" bindtap="handleDisable" data-id="{{item.id}}" data-name="{{item.name}}">
-            🚫 禁用
-          </button>
-          <!-- disabled 用户 → 启用 -->
-          <button class="action-btn enable" wx:if="{{item.status==='disabled'}}" bindtap="handleApprove" data-id="{{item.id}}" data-name="{{item.name}}">
-            ✅ 启用
-          </button>
-          <!-- 删除（不能删自己） -->
-          <button class="action-btn delete" wx:if="{{item.id!==user.id}}" bindtap="handleDeleteUser" data-id="{{item.id}}" data-name="{{item.name}}">
-            🗑 删除
-          </button>
-        </view>
-      </view>
-      <view class="empty" wx:if="{{users.length===0}}">
-        <text>暂无用户数据</text>
-      </view>
-    </view>
-  </block>
-
-  <!-- ── 账本列表 ── -->
-  <block wx:if="{{tab==='ledgers' && !loading}}">
-    <view class="section-title">全部账本 ({{ledgers.length}})</view>
-    <view class="ledger-list">
-      <view class="ledger-item" wx:for="{{ledgers}}" wx:key="id">
-        <view class="li-top">
-          <text class="li-icon">📖</text>
-          <view class="li-info">
-            <text class="li-name">{{item.name}}</text>
-            <text class="li-owner">创建者: {{item.owner ? item.owner.name : '未知'}}</text>
-          </view>
-          <text class="li-del" bindtap="handleDeleteLedger" data-id="{{item.id}}" data-name="{{item.name}}">🗑</text>
-        </view>
-        <view class="li-members" bindtap="showLedgerMembers" data-id="{{item.id}}">
-          <text>👥 查看成员</text>
-        </view>
-      </view>
-      <view class="empty" wx:if="{{ledgers.length===0}}">
-        <text>暂无账本</text>
-      </view>
-    </view>
-  </block>
+<!-- 游客提示 -->
+<view class="guest-tip-card" wx:if="{{isGuest}}">
+  <text class="guest-tip-icon">🔐</text>
+  <text class="guest-tip-title">登录后管理账户</text>
+  <text class="guest-tip-desc">登录后可以管理账本、家庭协同、导入导出等</text>
+  <button class="guest-tip-btn" bindtap="goLogin">去登录</button>
 </view>
 
-<!-- 审核弹窗 -->
-<view class="modal-mask" wx:if="{{showApprove}}" bindtap="closeApprove"></view>
-<view class="modal {{showApprove?'show':''}}">
-  <view class="modal-card">
-    <view class="modal-header">
-      <text class="modal-title">审核用户</text>
-      <text class="modal-close" bindtap="closeApprove">✕</text>
-    </view>
-    <view class="modal-body">
-      <text class="modal-label">将为「{{approveName}}」分配权限：</text>
-      <radio-group bindchange="onRoleChange">
-        <label class="radio-item">
-          <radio value="user" checked="{{approveRole==='user'}}"/>
-          <text>普通用户</text>
-        </label>
-        <label class="radio-item">
-          <radio value="admin" checked="{{approveRole==='admin'}}"/>
-          <text>管理员</text>
-        </label>
-      </radio-group>
-      <button class="modal-btn" bindtap="handleApprove">确认通过</button>
-    </view>
-  </view>
+<block wx:if="{{!isGuest}}">
+<view class="header-card">
+<view class="header-circle1"></view>
+<view class="header-circle2"></view>
+<text class="header-title">{{user.role==='admin'||user.role==='manager'?'管理后台':'我的账户'}}</text>
+<view class="header-right">
+<text class="logout-tag" bindtap="handleLogout">退出</text>
+</view>
+</view>
+
+<view class="tab-bar">
+<view class="tab-item {{tab==='family'?'active':''}}" bindtap="setTab" data-tab="family">
+<text class="tab-icon-text">👨‍👩‍👧</text>
+<text class="tab-label">家庭</text>
+</view>
+<view class="tab-item {{tab==='account'?'active':''}}" bindtap="setTab" data-tab="account">
+<text class="tab-icon-text">👤</text>
+<text class="tab-label">账户</text>
+</view>
+<view class="tab-item {{tab==='ledgers'?'active':''}}" bindtap="setTab" data-tab="ledgers">
+<text class="tab-icon-text">📒</text>
+<text class="tab-label">账本</text>
+</view>
+<view class="tab-item {{tab==='import'?'active':''}}" bindtap="goExport">
+<text class="tab-icon-text">💾</text>
+<text class="tab-label">导入导出</text>
+</view>
+<view class="tab-item {{tab==='users'?'active':''}}" bindtap="setTab" data-tab="users" wx:if="{{user.role==='admin'||user.role==='manager'}}">
+<text class="tab-icon-text">🛡️</text>
+<text class="tab-label">用户</text>
+</view>
+</view>
+
+<view class="loading-wrap" wx:if="{{loading}}">
+<text class="loading-text">加载中...</text>
+</view>
+
+<!-- 家庭 Tab -->
+<block wx:if="{{tab==='family' && !loading}}">
+<view class="empty-tip" wx:if="{{!currentLedger}}">
+<text class="empty-icon">📒</text>
+<text class="empty-text">请先选择账本</text>
+</view>
+<block wx:if="{{currentLedger}}">
+<view class="info-card">
+<view class="info-row">
+<text class="info-label">当前账本</text>
+<text class="info-value">{{currentLedger.name}}</text>
+</view>
+<view class="divider"></view>
+<view class="info-row">
+<text class="info-label">邀请码</text>
+<view class="invite-row">
+<text class="invite-code">{{inviteCode}}</text>
+<view class="copy-btn {{copied?'copied':''}}" bindtap="copyInviteCode">
+<text>{{copied?'✓ 已复制':'复制'}}</text>
+</view>
+</view>
+</view>
+</view>
+<view class="action-card" bindtap="openJoin">
+<text class="action-icon">🔗</text>
+<text class="action-text">加入其他账本</text>
+<text class="action-arrow">›</text>
+</view>
+<view class="section-title">账本成员</view>
+<view class="member-list">
+<view class="member-item" wx:for="{{members}}" wx:key="user_id">
+<text class="member-name">{{item.users.name || '未知'}}</text>
+<text class="member-role">{{item.role==='owner'?'创建者':'成员'}}</text>
+</view>
+</view>
+</block>
+</block>
+
+<!-- 账户 Tab -->
+<block wx:if="{{tab==='account' && !loading}}">
+<view class="section-title">个人信息</view>
+<view class="info-card">
+<view class="info-row">
+<text class="info-label">昵称</text>
+<input class="info-input" value="{{editName}}" bindinput="onNameInput" placeholder="输入昵称"/>
+</view>
+</view>
+<view class="save-btn" bindtap="handleSaveProfile"><text>保存昵称</text></view>
+<view class="about-btn" bindtap="goAbout"><text>关于游游记账</text></view>
+</block>
+
+<!-- 账本 Tab -->
+<block wx:if="{{tab==='ledgers' && !loading}}">
+<view class="section-title">我的账本</view>
+<view class="ledger-list">
+<view class="ledger-item {{currentLedger.id===item.id?'current':''}}" wx:for="{{myLedgers}}" wx:key="id" bindtap="switchLedger" data-ledger="{{item}}">
+<text class="ledger-icon">📒</text>
+<text class="ledger-name">{{item.name}}</text>
+<text class="ledger-type">{{item.type==='personal'?'个人':'家庭'}}</text>
+<text class="ledger-check" wx:if="{{currentLedger.id===item.id}}">✓</text>
+</view>
+</view>
+<view wx:if="{{myLedgers.length===0}}" class="empty-state"><text>暂无账本</text></view>
+</block>
+
+<!-- 用户管理 Tab -->
+<block wx:if="{{tab==='users' && !loading && (user.role==='admin'||user.role==='manager')}}">
+<view class="section-title">自动审核</view>
+<view class="info-card">
+<view class="info-row">
+<text class="info-label">新用户自动通过</text>
+<switch checked="{{autoApprove}}" bindchange="toggleAutoApprove" color="#6366f1"/>
+</view>
+</view>
+<view class="section-title">用户列表</view>
+<view class="user-list">
+<view class="user-item" wx:for="{{users}}" wx:key="id">
+<view class="user-info">
+<text class="user-name">{{item.name || '未设置昵称'}}</text>
+<text class="user-email">{{item.email || ''}}</text>
+</view>
+<view class="user-date">{{item.created_at?item.created_at.slice(0,10):'-'}}</view>
+<view class="user-status">
+<text class="status-tag {{item.status}}">{{item.status==='active'?'正常':item.status==='pending'?'待审核':'已禁用'}}</text>
+</view>
+<view class="user-actions" wx:if="{{item.status==='pending'}}">
+<text class="action-btn approve" bindtap="handleApproveUser" data-id="{{item.id}}">通过</text>
+</view>
+<view class="user-actions" wx:if="{{item.status==='active'}}">
+<text class="action-btn disable" bindtap="handleDisableUser" data-id="{{item.id}}">禁用</text>
+</view>
+<view class="user-actions" wx:if="{{item.status==='disabled'}}">
+<text class="action-btn enable" bindtap="handleEnableUser" data-id="{{item.id}}">启用</text>
+<text class="action-btn delete" bindtap="handleDeleteUser" data-id="{{item.id}}">删除</text>
+</view>
+</view>
+</view>
+</block>
+
+<!-- 加入账本弹窗 -->
+<view class="modal-mask" wx:if="{{showJoin}}" bindtap="closeJoin"></view>
+<view class="modal-sheet {{showJoin?'show':''}}">
+<view class="sheet-handle"></view>
+<text class="sheet-title">加入账本</text>
+<view class="sheet-row">
+<text class="sheet-label">邀请码</text>
+<input class="sheet-input" placeholder="输入8位邀请码" value="{{joinCode}}" bindinput="onJoinCodeInput" maxlength="8"/>
+</view>
+<view class="sheet-btns">
+<text class="sheet-btn cancel" bindtap="closeJoin">取消</text>
+<text class="sheet-btn confirm" bindtap="handleJoin">{{joining?'加入中...':'加入'}}</text>
+</view>
+</view>
+</block>
 </view>

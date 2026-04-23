@@ -48,7 +48,7 @@
     <button class="delete-btn" bindtap="handleDeleteAccount">删除账号</button>
   </view>
 
-  <text class="app-version">游游记账 v1.0</text>
+  <text class="app-version">游游记账 v3.0.3</text>
 </view>
 
 <!-- 修改昵称弹窗 -->

@@ -101,6 +101,11 @@ Page({
     }
   },
 
+  goAgreement() { wx.navigateTo({ url: '/pages/agreement/agreement' }) },
+  goPrivacy()   { wx.navigateTo({ url: '/pages/privacy/privacy' }) },
+  goAdmin()     { wx.switchTab({ url: '/pages/admin/admin' }) },
+  goAbout()     { wx.showModal({ title: '游游记账 v4.0.1', content: '家庭协同记账工具\n支持多账本、预算管理、数据分析', showCancel: false }) },
+
   // 删除我的账号
   handleDeleteAccount() {
     wx.showModal({
@@ -116,8 +121,8 @@ Page({
             // 删除用户所有数据
             const { user, currentLedger } = app.globalData
             await supabase.from('transactions').delete().eq('user_id', user.id)
-            await supabase.from('categories').delete().eq('ledger_id', currentLedger?.id)
-            await supabase.from('budgets').delete().eq('ledger_id', currentLedger?.id)
+            await supabase.from('categories').delete().eq('ledger_id', currentLedger.id)
+            await supabase.from('budgets').delete().eq('ledger_id', currentLedger.id)
             await supabase.from('ledger_members').delete().eq('user_id', user.id)
             await supabase.from('ledgers').delete().eq('owner_id', user.id)
             await supabase.from('users').delete().eq('id', user.id)

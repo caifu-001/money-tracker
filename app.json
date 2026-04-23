@@ -1,13 +1,16 @@
 {
   "pages": [
-    "pages/login/login",
     "pages/home/home",
+    "pages/login/login",
     "pages/budget/budget",
     "pages/analytics/analytics",
     "pages/categories/categories",
     "pages/family/family",
     "pages/ledgers/ledgers",
     "pages/admin/admin",
+    "pages/export/export",
+    "pages/privacy/privacy",
+    "pages/agreement/agreement",
     "pages/settings/settings"
   ],
   "window": {
@@ -26,8 +29,8 @@
       { "pagePath": "pages/home/home",       "text": "首页",   "iconPath": "assets/icons/home.png",       "selectedIconPath": "assets/icons/home-active.png" },
       { "pagePath": "pages/budget/budget",   "text": "预算",   "iconPath": "assets/icons/budget.png",     "selectedIconPath": "assets/icons/budget-active.png" },
       { "pagePath": "pages/analytics/analytics", "text": "分析", "iconPath": "assets/icons/chart.png",   "selectedIconPath": "assets/icons/chart-active.png" },
-      { "pagePath": "pages/categories/categories", "text": "类别", "iconPath": "assets/icons/tag.png",  "selectedIconPath": "assets/icons/tag-active.png" },
-      { "pagePath": "pages/ledgers/ledgers", "text": "账本",   "iconPath": "assets/icons/book.png",      "selectedIconPath": "assets/icons/book-active.png" }
+      { "pagePath": "pages/categories/categories", "text": "分类", "iconPath": "assets/icons/tag.png",  "selectedIconPath": "assets/icons/tag-active.png" },
+      { "pagePath": "pages/admin/admin", "text": "管理", "iconPath": "assets/icons/settings.png",      "selectedIconPath": "assets/icons/settings-active.png" }
     ]
   },
   "networkTimeout": {
@@ -40,5 +43,7 @@
       "desc": "用于记录消费地点"
     }
   },
-  "sitemapLocation": "sitemap.json"
+  "sitemapLocation": "sitemap.json",
+  "requiredBackgroundModes": [],
+  "requiredPrivateInfos": []
 }

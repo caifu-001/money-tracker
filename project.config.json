@@ -1,5 +1,5 @@
 {
-  "description": "钱迹记账 - 微信小程序",
+  "description": "游游记账 - 微信小程序",
   "setting": {
     "urlCheck": false,
     "es6": true,
@@ -44,7 +44,7 @@
   },
   "compileType": "miniprogram",
   "libVersion": "3.4.3",
-  "appid": "wxb4bd04b571410297",
+  "appid": "wx30ef5296dd2cd8f7",
   "projectname": "money-tracker-miniapp",
   "condition": {},
   "simulatorPluginLibVersion": {},

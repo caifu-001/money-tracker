@@ -1,16 +1,61 @@
-<!--pages/family/family.wxml-->
 <view class="page">
-  <view class="header">
-    <text class="title">👨‍👩‍👧 成员管理</text>
-    <text class="desc">邀请成员协同记账</text>
-  </view>
-  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
-  <view class="content" wx:else>
-    <!-- TODO: 完整功能开发中 -->
-    <view class="placeholder">
-      <text class="ph-icon">👥</text>
-      <text class="ph-text">👨‍👩‍👧 成员管理</text>
-      <text class="ph-sub">功能完整实现中，敬请期待</text>
-    </view>
-  </view>
+<view class="header-card">
+<view class="header-circle header-circle1"></view>
+<view class="header-circle header-circle2"></view>
+<text class="header-title">家庭协同</text>
+<text class="header-sub">邀请成员一起记账</text>
+</view>
+
+<view class="loading" wx:if="{{loading}}"><text class="loading-text">加载中...</text></view>
+
+<view wx:if="{{!loading && currentLedger}}">
+<!-- 邀请卡片 -->
+<view class="invite-card">
+<view class="invite-row">
+<text class="invite-label">邀请码（发给家人让他们输入加入）</text>
+<view class="invite-code-wrap">
+<text class="invite-code">{{inviteCode}}</text>
+<view class="copy-btn {{copied?'copied':''}}" bindtap="copyCode"><text>{{copied?'已复制':'复制'}}</text></view>
+</view>
+</view>
+<!-- 加入按钮 -->
+<view class="join-btn" bindtap="toggleJoin">
+<text>{{showJoin ? '收起' : '输入邀请码加入他人账本'}}</text>
+</view>
+</view>
+
+<!-- 加入表单 -->
+<view class="join-card" wx:if="{{showJoin}}">
+<text class="join-card-title">🔗 加入他人账本</text>
+<text class="join-card-sub">输入对方分享的邀请码（8位字母数字）</text>
+<input class="join-input" type="text" value="{{joinCode}}" maxlength="8" placeholder="例如：A1B2C3D4" bindinput="onJoinCodeInput" />
+<view class="join-result {{joinResult.ok?'ok':'err'}}" wx:if="{{joinResult}}">
+<text>{{joinResult.msg}}</text>
+</view>
+<view class="join-submit-btn {{joining||joinCode.length<6?'disabled':''}}" bindtap="handleJoin">
+<text>{{joining?'加入中...':'✓ 确认加入'}}</text>
+</view>
+</view>
+
+<!-- 成员列表 -->
+<view class="section-header" style="padding-left:40rpx">
+<text class="section-title">成员列表</text>
+<text class="section-count">共{{members.length}}人</text>
+</view>
+<view class="member-list">
+<view class="member-item" wx:for="{{members}}" wx:key="id">
+<view class="member-avatar"><text>{{item.users.name[0]}}</text></view>
+<view class="member-info">
+<text class="member-name">{{item.users.name}}</text>
+<text class="member-role">{{item.role==='owner'?'👑 账本主人':item.role==='editor'?'✏️ 编辑者':'👁 查看者'}}</text>
+</view>
+<view class="role-icon"><text>{{item.role==='owner'?'👑':'👤'}}</text></view>
+</view>
+</view>
+</view>
+
+<view wx:if="{{!loading && !currentLedger}}" style="text-align:center;padding:120rpx 40rpx;background:#fff;margin:32rpx;border-radius:24rpx;">
+<text style="font-size:72rpx;display:block;">📒</text>
+<text style="color:#9ca3af;font-size:28rpx;margin-top:16rpx;display:block;">请先选择账本</text>
+</view>
 </view>

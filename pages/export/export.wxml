@@ -1,0 +1,130 @@
+<view class="page">
+  <!-- 顶部标题 -->
+  <view class="header-card">
+    <view class="header-icon">💾</view>
+    <view class="header-info">
+      <text class="header-title">数据导入导出</text>
+      <text class="header-sub">安全备份，随时恢复</text>
+    </view>
+    <view wx:if="{{currentLedger}}" class="ledger-badge">
+      <text>{{currentLedger.name}}</text>
+    </view>
+  </view>
+
+  <!-- 无账本提示 -->
+  <view wx:if="{{!currentLedger}}" class="empty-tip">
+    <text>请先选择账本</text>
+  </view>
+
+  <block wx:if="{{currentLedger}}">
+    <!-- 导出卡片 -->
+    <view class="section-card">
+      <view class="section-title">
+        <text class="section-icon">📤</text>
+        <text>导出数据</text>
+      </view>
+
+      <!-- 导出范围 -->
+      <view class="field-group">
+        <text class="field-label">CSV 导出范围</text>
+        <view class="btn-group">
+          <view class="btn-toggle {{exportRange==='all'?'active':''}}" data-val="all" bindtap="setExportRange">
+            全部记录
+          </view>
+          <view class="btn-toggle {{exportRange==='month'?'active':''}}" data-val="month" bindtap="setExportRange">
+            按月份
+          </view>
+        </view>
+        <input wx:if="{{exportRange==='month'}}" type="month" value="{{exportMonth}}" bindchange="setExportMonth"
+          class="month-input" />
+      </view>
+
+      <!-- 导出按钮 -->
+      <view class="export-btn-group">
+        <view class="export-btn primary" bindtap="handleExportCSV" hover-class="btn-press">
+          <text class="export-btn-icon">📊</text>
+          <view class="export-btn-text">
+            <text class="export-btn-title">导出 CSV</text>
+            <text class="export-btn-sub">交易记录，Excel可打开</text>
+          </view>
+        </view>
+
+        <view class="export-btn warning" bindtap="handleExportJSON" hover-class="btn-press">
+          <text class="export-btn-icon">💾</text>
+          <view class="export-btn-text">
+            <text class="export-btn-title">导出 JSON 备份</text>
+            <text class="export-btn-sub">含所有数据，可恢复</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 导入卡片 -->
+    <view class="section-card">
+      <view class="section-title">
+        <text class="section-icon">📥</text>
+        <text>导入数据</text>
+      </view>
+
+      <!-- 选择文件触发区 -->
+      <view wx:if="{{!showImportConfirm}}" class="import-drop" bindtap="chooseFile" hover-class="btn-press">
+        <text class="drop-icon">📁</text>
+        <text class="drop-title">点击选择 JSON 备份文件</text>
+        <text class="drop-sub">仅支持游游记账导出的 .json 文件</text>
+      </view>
+
+      <!-- 导入预览 + 确认 -->
+      <view wx:if="{{showImportConfirm && preview}}" class="import-preview">
+        <view class="preview-header">
+          <text class="preview-name">📁 {{preview.ledger}}</text>
+          <text class="preview-date">{{preview.date}} 导出</text>
+        </view>
+
+        <view class="preview-stats">
+          <view class="stat-chip"><text>📝 {{preview.txs}} 笔交易</text></view>
+          <view class="stat-chip"><text>📂 {{preview.cats}} 个类别</text></view>
+          <view class="stat-chip"><text>💰 {{preview.budgets}} 条预算</text></view>
+        </view>
+
+        <!-- 导入模式 -->
+        <view class="field-group" style="margin-top:12px">
+          <text class="field-label">导入模式</text>
+          <view class="btn-group">
+            <view class="btn-toggle {{importMode==='merge'?'active green':''}}" data-val="merge" bindtap="setImportMode">
+              🤝 合并
+            </view>
+            <view class="btn-toggle {{importMode==='overwrite'?'active red':''}}" data-val="overwrite" bindtap="setImportMode">
+              ⚠️ 覆盖
+            </view>
+          </view>
+          <text class="mode-hint" wx:if="{{importMode==='merge'}}">✓ 保留现有数据，新增重复记录</text>
+          <text class="mode-hint red" wx:if="{{importMode==='overwrite'}}">⚠️ 清空现有数据后导入</text>
+        </view>
+
+        <view class="preview-actions">
+          <view class="btn-cancel" bindtap="cancelImport" hover-class="btn-press">取消</view>
+          <view class="btn-confirm {{importMode}}" bindtap="doImport" hover-class="btn-press">
+            {{importing?'导入中...':'✓ 确认导入'}}
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 安全提示 -->
+    <view class="safe-tip">
+      <text class="safe-icon">🛡️</text>
+      <view class="safe-text">
+        <text class="safe-title">数据安全提示</text>
+        <text class="safe-desc">备份文件包含您的所有账目数据，请妥善保管。导入时选择"合并"模式可避免数据丢失。建议定期备份重要数据。</text>
+      </view>
+    </view>
+  </block>
+
+  <!-- Loading遮罩 -->
+  <view wx:if="{{exporting}}" class="loading-mask">
+    <view class="loading-box">
+      <view class="loading-spinner"></view>
+      <text class="loading-text">导出中...</text>
+    </view>
+  </view>
+</view>

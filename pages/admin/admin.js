@@ -5,6 +5,7 @@ const { supabase } = require('../../utils/supabase')
 Page({
   data: {
     user: null,
+    isGuest: true,
     currentLedger: null,
     loading: true,
     tab: 'family',
@@ -18,39 +19,55 @@ Page({
     myLedgers: [],
     editName: '',
     savingProfile: false,
-    showPasswordForm: false,
-    newPassword: '',
-    changingPwd: false,
-    ledgers: [],
-    showCreateLedger: false,
-    newLedgerName: '',
-    newLedgerType: 'personal',
-    creating: false,
+    // 用户管理
     users: [],
-    showApprove: false,
-    approveUserId: '',
-    approveName: '',
-    approveRole: 'user',
+    autoApprove: false,
+    // 加入账本
+    inputInviteCode: '',
   },
 
   onLoad() {
-    console.log('admin onLoad')
     const user = app.globalData.user
-    if (!user) return wx.reLaunch({ url: '/pages/login/login' })
     const currentLedger = app.globalData.currentLedger
-    this.setData({ user, editName: user.name || '', currentLedger })
-    this.loadData()
-  },
-
-  handleLogout() {
-    console.log('logout tapped')
-    app.logout()
+    this.setData({ 
+      user: user || null, 
+      isGuest: !user,
+      editName: user?.name || '', 
+      currentLedger 
+    })
+    if (user) this.loadData()
   },
 
   onShow() {
+    // 刷新用户状态
+    const user = app.globalData.user
+    this.setData({ user: user || null, isGuest: !user })
+    
     const currentLedger = app.globalData.currentLedger
     this.setData({ currentLedger })
-    this.loadData()
+    if (user) this.loadData()
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: '/pages/login/login' })
+  },
+
+  onNameInput(e) { this.setData({ editName: e.detail.value }) },
+
+  async handleSaveProfile() {
+    const { editName, user } = this.data
+    if (!editName || !editName.trim()) return wx.showToast({ title: '昵称不能为空', icon: 'none' })
+    const { error } = await supabase.from('users').update({ name: editName.trim() }).eq('id', user.id)
+    if (error) return wx.showToast({ title: error.message || '修改失败', icon: 'none' })
+    const updatedUser = { ...user, name: editName.trim() }
+    app.globalData.user = updatedUser
+    wx.setStorageSync('user_info', updatedUser)
+    this.setData({ user: updatedUser })
+    wx.showToast({ title: '昵称已修改', icon: 'success' })
+  },
+
+  handleLogout() {
+    app.logout()
   },
 
   setTab(e) {
@@ -64,6 +81,8 @@ Page({
 
   async loadData() {
     const { tab, user } = this.data
+    if (!user) { this.setData({ loading: false }); return }
+    
     this.setData({ loading: true })
     if (tab === 'family') {
       await this.loadMembers()
@@ -72,6 +91,7 @@ Page({
       await this.loadLedgers()
     } else if (tab === 'users' && (user.role === 'admin' || user.role === 'manager')) {
       await this.loadUsers()
+      await this.loadAutoApprove()
     }
     this.setData({ loading: false })
   },
@@ -79,228 +99,139 @@ Page({
   async loadMembers() {
     const ledger = app.globalData.currentLedger
     if (!ledger) return
-    const { data } = await supabase.from('ledger_members').select('*').eq('ledger_id', ledger.id)
-    const { data: allLedgers } = await supabase.from('ledgers').select('*')
-    this.setData({ 
-      members: data || [], 
-      allLedgers: allLedgers || [],
-      inviteCode: ledger.id
-    })
+    const { data } = await supabase.from('ledger_members').select('user_id, role, users(name)').eq('ledger_id', ledger.id)
+    this.setData({ members: data || [] })
+    // 生成邀请码：账本ID去横线前8位
+    this.setData({ inviteCode: ledger.id.replace(/-/g, '').slice(0, 8).toUpperCase() })
   },
 
   async loadMyLedgers() {
-    const user = app.globalData.user
-    if (!user) return
-    const { data } = await supabase.from('ledgers').select('*').eq('owner_id', user.id)
-    this.setData({ myLedgers: data || [] })
+    const { user } = this.data
+    // 自己创建的账本
+    const { data: owned } = await supabase.from('ledgers').select('*').eq('owner_id', user.id)
+    // 加入的账本
+    const { data: memberOf } = await supabase.from('ledger_members').select('ledgers(*)').eq('user_id', user.id)
+    const joined = (memberOf || []).map(m => m.ledgers).filter(Boolean)
+    const all = [...(owned || []), ...joined]
+    // 去重
+    const map = new Map()
+    all.forEach(l => { if (l && l.id) map.set(l.id, l) })
+    this.setData({ myLedgers: Array.from(map.values()) })
   },
 
   async loadLedgers() {
-    const user = app.globalData.user
-    if (!user) return
-    const { data } = await supabase.from('ledgers').select('*').eq('owner_id', user.id)
-    this.setData({ ledgers: data || [] })
+    await this.loadMyLedgers()
   },
 
   async loadUsers() {
-    const { data } = await supabase.from('users').select('*')
+    const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false })
     this.setData({ users: data || [] })
   },
 
+  async loadAutoApprove() {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+    this.setData({ autoApprove: data?.value === 'true' })
+  },
+
+  copyInviteCode() {
+    wx.setClipboardData({ data: this.data.inviteCode, success: () => {
+      this.setData({ copied: true })
+      setTimeout(() => this.setData({ copied: false }), 2000)
+    }})
+  },
+
+  openJoin() { this.setData({ showJoin: true, joinCode: '', joinResult: null }) },
+  closeJoin() { this.setData({ showJoin: false }) },
+  onJoinCodeInput(e) { this.setData({ joinCode: e.detail.value.toUpperCase() }) },
+
   async handleJoin() {
-    const { joinCode } = this.data
-    if (!joinCode) return wx.showToast({ title: '请输入邀请码', icon: 'none' })
+    const { joinCode, user } = this.data
+    if (!joinCode || joinCode.length < 8) return wx.showToast({ title: '请输入8位邀请码', icon: 'none' })
     this.setData({ joining: true })
-    // 先用邀请码查找对应账本
-    const { data: allLedgers } = await supabase.from('ledgers').select('*')
-    const code = joinCode.trim().toUpperCase().replace(/-/g, '')
-    const matched = (allLedgers || []).find(l => {
-      const lid = l.id.replace(/-/g, '').toUpperCase()
-      return lid.startsWith(code) || code.startsWith(lid.substring(0, 8))
-    })
-    if (!matched) {
+    try {
+      // 通过邀请码查找账本
+      const { data: ledgers } = await supabase.from('ledgers').select('*')
+      const target = (ledgers || []).find(l => l.id.replace(/-/g, '').slice(0, 8).toUpperCase() === joinCode.toUpperCase())
+      if (!target) throw new Error('邀请码无效')
+      
+      // 加入账本
+      const { error } = await supabase.from('ledger_members').insert([{
+        ledger_id: target.id, user_id: user.id, role: 'editor'
+      }])
+      if (error) throw new Error(error.message)
+      
+      this.setData({ showJoin: false, joinResult: { success: true, ledger: target } })
+      wx.showToast({ title: '加入成功', icon: 'success' })
+      this.loadMyLedgers()
+    } catch (e) {
+      this.setData({ joinResult: { success: false, error: e.message || '加入失败' } })
+      wx.showToast({ title: e.message || '加入失败', icon: 'none' })
+    } finally {
       this.setData({ joining: false })
-      return wx.showToast({ title: '邀请码无效', icon: 'none' })
-    }
-    // 检查是否已是成员
-    const { data: existing } = await supabase.from('ledger_members').select('id')
-      .eq('ledger_id', matched.id).eq('user_id', app.globalData.user.id)
-    if (existing && existing.length > 0) {
-      this.setData({ joining: false })
-      return wx.showToast({ title: '你已是该账本成员', icon: 'none' })
-    }
-    // 加入账本，role 必须是 owner/editor/viewer 之一
-    const { error } = await supabase.from('ledger_members').insert([{ ledger_id: matched.id, user_id: app.globalData.user.id, role: 'editor' }])
-    this.setData({ joining: false })
-    if (error) return wx.showToast({ title: error.message || '加入失败', icon: 'none' })
-    this.setData({ showJoin: false, joinCode: '' })
-    wx.showToast({ title: '加入成功', icon: 'success' })
-    this.loadMembers()
-  },
-
-  async handleCreateLedger() {
-    const { newLedgerName, newLedgerType } = this.data
-    if (!newLedgerName) return wx.showToast({ title: '请输入账本名称', icon: 'none' })
-    this.setData({ creating: true })
-    const { data, error } = await supabase.from('ledgers').insert([{ name: newLedgerName, type: newLedgerType, owner_id: app.globalData.user.id }])
-    this.setData({ creating: false })
-    if (error) return wx.showToast({ title: error.message, icon: 'none' })
-    this.setData({ showCreateLedger: false, newLedgerName: '' })
-    wx.showToast({ title: '创建成功', icon: 'success' })
-    if (data && data[0]) {
-      app.saveDefaultLedger(data[0])
-      app.globalData.currentLedger = data[0]
-    }
-    this.loadData()
-  },
-
-  async handleDeleteLedger(e) {
-    const { id, name } = e.currentTarget.dataset
-    const res = await wx.showModal({ title: '删除账本', content: '确定删除账本「' + name + '」？' })
-    if (!res.confirm) return
-    await supabase.from('ledger_members').delete().eq('ledger_id', id)
-    await supabase.from('transactions').delete().eq('ledger_id', id)
-    await supabase.from('categories').delete().eq('ledger_id', id)
-    await supabase.from('budgets').delete().eq('ledger_id', id)
-    await supabase.from('ledgers').delete().eq('id', id)
-    if (app.globalData.currentLedger && app.globalData.currentLedger.id === id) {
-      const d = app.getDefaultLedger()
-      app.globalData.currentLedger = d || null
-    }
-    wx.showToast({ title: '已删除', icon: 'success' })
-    this.loadData()
-  },
-
-  async handleResetPassword(e) {
-    const { id, name } = e.currentTarget.dataset
-    const res = await wx.showModal({
-      title: '重置密码',
-      content: '为「' + name + '」设置新密码',
-      editable: true,
-      placeholderText: '输入新密码（至少6位）'
-    })
-    if (!res.confirm || !res.content) return
-    if (res.content.length < 6) return wx.showToast({ title: '密码至少6位', icon: 'none' })
-    wx.showLoading({ title: '重置中...' })
-    const result = await new Promise((resolve) => {
-      wx.request({
-        url: 'https://abkscyijuvkfeazhlquz.supabase.co/auth/v1/admin/users/' + id,
-        method: 'PUT',
-        header: {
-          'Content-Type': 'application/json',
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDQxMjU0MiwiZXhwIjoyMDg5OTg4NTQyfQ.tVBp64EO05d6ADTv7Mb9PvSPgPdmXF-_fiYoA2tzpow',
-          'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDQxMjU0MiwiZXhwIjoyMDg5OTg4NTQyfQ.tVBp64EO05d6ADTv7Mb9PvSPgPdmXF-_fiYoA2tzpow'
-        },
-        data: { password: res.content },
-        success: (res) => resolve({ ok: true, data: res }),
-        fail: (err) => resolve({ ok: false, err: err })
-      })
-    })
-    wx.hideLoading()
-    if (!result.ok) {
-      wx.showToast({ title: '请求失败', icon: 'none' })
-      return
-    }
-    var r = result.data
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      wx.showToast({ title: '密码重置成功', icon: 'success' })
-    } else {
-      wx.showToast({ title: '重置失败', icon: 'none' })
     }
   },
 
-  async handleApproveUser() {
-    const { approveUserId, approveRole } = this.data
-    wx.showLoading({ title: '处理中...' })
-    const { error } = await supabase.from('users').update({ status: 'active', role: approveRole }).eq('id', approveUserId)
-    wx.hideLoading()
+  async toggleAutoApprove() {
+    const { autoApprove, user } = this.data
+    const newVal = !autoApprove
+    const { error } = await supabase.from('app_settings').upsert([{ key: 'auto_approve', value: String(newVal) }], { onConflict: 'key' })
+    if (error) return wx.showToast({ title: error.message || '修改失败', icon: 'none' })
+    this.setData({ autoApprove: newVal })
+    wx.showToast({ title: newVal ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
+  },
+
+  async handleApproveUser(e) {
+    const userId = e.currentTarget.dataset.id
+    const { error } = await supabase.from('users').update({ status: 'active' }).eq('id', userId)
     if (error) return wx.showToast({ title: error.message || '操作失败', icon: 'none' })
-    this.setData({ showApprove: false })
+    wx.showToast({ title: '已通过', icon: 'success' })
     this.loadUsers()
-    wx.showToast({ title: '操作成功', icon: 'success' })
   },
 
   async handleDisableUser(e) {
-    const { id } = e.currentTarget.dataset
-    const res = await wx.showModal({ title: '确认禁用', content: '确定禁用该用户？' })
-    if (!res.confirm) return
-    const { error } = await supabase.from('users').update({ status: 'disabled' }).eq('id', id)
+    const userId = e.currentTarget.dataset.id
+    const { error } = await supabase.from('users').update({ status: 'disabled' }).eq('id', userId)
     if (error) return wx.showToast({ title: error.message || '操作失败', icon: 'none' })
-    this.loadUsers()
     wx.showToast({ title: '已禁用', icon: 'success' })
+    this.loadUsers()
   },
 
   async handleEnableUser(e) {
-    const { id } = e.currentTarget.dataset
-    const { error } = await supabase.from('users').update({ status: 'active' }).eq('id', id)
+    const userId = e.currentTarget.dataset.id
+    const { error } = await supabase.from('users').update({ status: 'active' }).eq('id', userId)
     if (error) return wx.showToast({ title: error.message || '操作失败', icon: 'none' })
-    this.loadUsers()
     wx.showToast({ title: '已启用', icon: 'success' })
+    this.loadUsers()
   },
 
   async handleDeleteUser(e) {
-    const { id } = e.currentTarget.dataset
-    const res = await wx.showModal({ title: '删除用户', content: '确定删除该用户？' })
-    if (!res.confirm) return
-    await supabase.from('users').delete().eq('id', id)
-    this.loadUsers()
-    wx.showToast({ title: '已删除', icon: 'success' })
+    const userId = e.currentTarget.dataset.id
+    wx.showModal({
+      title: '确认删除',
+      content: '删除用户后其数据将无法恢复，确定删除吗？',
+      success: async (res) => {
+        if (!res.confirm) return
+        const { error } = await supabase.from('users').delete().eq('id', userId)
+        if (error) return wx.showToast({ title: error.message || '删除失败', icon: 'none' })
+        wx.showToast({ title: '已删除', icon: 'success' })
+        this.loadUsers()
+      }
+    })
   },
 
-  async handleDeleteMember(e) {
-    const { id } = e.currentTarget.dataset
-    await supabase.from('ledger_members').delete().eq('id', id)
-    this.loadMembers()
-  },
-
-  async handleLeaveLedger(e) {
-    const { id } = e.currentTarget.dataset
-    const res = await wx.showModal({ title: '退出账本', content: '确定退出该账本？' })
-    if (!res.confirm) return
-    await supabase.from('ledger_members').delete().eq('id', id)
-    if (app.globalData.currentLedger && app.globalData.currentLedger.id === id) app.globalData.currentLedger = null
-    this.loadMembers()
-    wx.showToast({ title: '已退出', icon: 'success' })
-  },
-
-  handleApproveOpen(e) {
-    const { id, name, role } = e.currentTarget.dataset
-    this.setData({ showApprove: true, approveUserId: id, approveName: name, approveRole: role || 'user' })
-  },
-  closeApprove() { this.setData({ showApprove: false }) },
-  onApproveRoleChange(e) { this.setData({ approveRole: e.detail.value }) },
-  onJoinCodeInput(e) { this.setData({ joinCode: e.detail.value }) },
-  onNewLedgerInput(e) { this.setData({ newLedgerName: e.detail.value }) },
-  onNewLedgerTypeChange(e) { this.setData({ newLedgerType: e.currentTarget.dataset.value }) },
-  toggleJoin() { this.setData({ showJoin: !this.data.showJoin, joinCode: '' }) },
-  toggleCreateLedger() { this.setData({ showCreateLedger: !this.data.showCreateLedger, newLedgerName: '', newLedgerType: 'personal' }) },
-  copyInviteCode() {
-    const { inviteCode } = this.data
-    wx.setClipboardData({ data: inviteCode, success: () => wx.showToast({ title: '已复制', icon: 'success' }) })
-    this.setData({ copied: true })
-    setTimeout(() => this.setData({ copied: false }), 2000)
-  },
-
-  handleSwitchLedger(e) {
-    const { id } = e.currentTarget.dataset
-    if (!id) return
-    const ledger = this.data.ledgers ? this.data.ledgers.find(l => l.id === id) : null
-    if (!ledger) { console.error('Ledger not found, id:', id, 'ledgers:', this.data.ledgers); return }
+  switchLedger(e) {
+    const ledger = e.currentTarget.dataset.ledger
     app.globalData.currentLedger = ledger
     app.saveDefaultLedger(ledger)
     this.setData({ currentLedger: ledger })
-    wx.showToast({ title: '已切换到「' + ledger.name + '」', icon: 'success' })
+    wx.showToast({ title: '已切换账本', icon: 'success' })
   },
 
-  handleSetDefaultLedger(e) {
-    const { id } = e.currentTarget.dataset
-    if (!id) return
-    const ledger = this.data.ledgers ? this.data.ledgers.find(l => l.id === id) : null
-    if (!ledger) return
-    app.saveDefaultLedger(ledger)
-    app.globalData.currentLedger = ledger
-    this.setData({ currentLedger: ledger })
-    wx.showToast({ title: '已设为默认', icon: 'success' })
-  }
+  goAbout() {
+    wx.showModal({
+      title: '游游记账',
+      content: '版本：v4.0.1\n\n一款简洁的家庭记账工具\n支持多账本、预算管理、数据分析\n\n© 2026 游游记账团队',
+      showCancel: false
+    })
+  },
 })
-console.log('admin.js loaded OK')

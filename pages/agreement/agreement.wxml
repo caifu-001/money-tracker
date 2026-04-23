@@ -1,0 +1,57 @@
+<view class="page">
+  <scroll-view scroll-y class="content-scroll" bindscroll="onScroll" lower-threshold="50" bindscrolltolower="onReachBottom">
+    <view class="header-card">
+      <view class="header-circle header-circle1"></view>
+      <view class="header-circle header-circle2"></view>
+      <text class="header-title">用户协议</text>
+      <text class="header-sub">Version 4.0.1 · 2026年4月</text>
+    </view>
+    <view class="content-card">
+      <view class="section">
+        <text class="section-title">一、服务说明</text>
+        <text class="section-body">游游记账是一款个人及家庭记账工具（以下简称「本服务」）。您开始使用本服务即表示您同意遵守本协议的所有条款。我们保留随时修改本协议的权利，修改后的协议将在应用内公示。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">二、账户注册</text>
+        <text class="section-body">您需使用真实信息注册账户，一个自然人可注册一个账户。账户仅限本人使用，禁止转让、出借或共享。您有责任妥善保管账户信息，因账户被盗用造成的损失由您自行承担。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">三、使用规范</text>
+        <text class="section-body">您承诺在使用本服务时：1）遵守中华人民共和国法律法规；2）不利用本服务从事任何违法活动；3）不发布任何违法、有害、侵权或不当内容；4）不尝试破解、入侵或破坏本服务的正常运行。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">四、数据所有权</text>
+        <text class="section-body">您在本服务中创建的所有账本数据归您本人所有。我们承诺不会对您的数据进行任何未经授权的访问、使用或披露。您可随时联系我们删除账户及全部数据。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">五、服务变更与中断</text>
+        <text class="section-body">我们有权在必要时临时或永久修改、暂停或终止本服务的全部或部分功能，不对此承担任何责任，但会尽可能提前通知用户。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">六、免责声明</text>
+        <text class="section-body">本服务按「现状」提供，我们不对服务的及时性、安全性、准确性做任何明示或暗示保证。因使用本服务造成的任何直接或间接损失，我们不承担责任。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">七、知识产权</text>
+        <text class="section-body">本服务及其相关软件、界面设计、图标等知识产权归我们所有。未经授权，任何人不得复制、修改、传播或商业使用本服务的任何内容。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">八、联系我们</text>
+        <text class="section-body">如对本协议有任何问题，请通过应用内「管理后台」联系管理员，我们会尽快与您沟通。</text>
+      </view>
+      <text class="update-time">更新日期：2026年4月13日</text>
+      <!-- 底部占位，让内容能滚完 -->
+      <view style="height:120rpx"></view>
+    </view>
+  </scroll-view>
+
+  <!-- 未滚到底部时的提示 -->
+  <view class="bottom-bar" wx:if="{{!reachedBottom}}">
+    <text class="bottom-hint">📜 请向上滚动完整阅读用户协议</text>
+  </view>
+
+  <!-- 滚到底部后可确认 -->
+  <view class="bottom-bar" wx:if="{{reachedBottom}}">
+    <view class="confirm-btn" bindtap="handleConfirm">已阅读并同意协议</view>
+  </view>
+</view>

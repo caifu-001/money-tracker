@@ -1,0 +1,49 @@
+<view class="page">
+  <scroll-view scroll-y class="content-scroll" bindscroll="onScroll" lower-threshold="50" bindscrolltolower="onReachBottom">
+    <view class="header-card">
+      <view class="header-circle header-circle1"></view>
+      <view class="header-circle header-circle2"></view>
+      <text class="header-title">隐私政策</text>
+      <text class="header-sub">Version 4.0.1 · 2026年4月</text>
+    </view>
+    <view class="content-card">
+      <view class="section">
+        <text class="section-title">一、信息收集</text>
+        <text class="section-body">游游记账在您注册、使用服务时，会收集您主动提供的信息，包括：账户信息（用户名、邮箱）、记账数据（收支分类、金额、备注）、设备信息（用于优化服务体验）。我们不会收集与记账无关的个人信息。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">二、信息使用</text>
+        <text class="section-body">您的数据仅用于：提供记账服务、数据统计分析、账户安全验证。我们不会将您的个人数据出售或提供给任何第三方广告商使用。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">三、信息存储</text>
+        <text class="section-body">您的数据存储在云端服务器（Supabase），采用加密传输（HTTPS）和数据加密存储保障安全。您的账本数据属于您所有，可随时联系我们删除。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">四、信息共享</text>
+        <text class="section-body">除以下情况外，我们不会与任何第三方共享您的信息：1）获得您明确授权；2）法律法规要求；3）保护我们或用户的合法权益。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">五、Cookie 使用</text>
+        <text class="section-body">小程序使用本地存储（wx.setStorage）保存您的登录状态，不会使用第三方追踪 Cookie。</text>
+      </view>
+      <view class="section">
+        <text class="section-title">六、联系我们</text>
+        <text class="section-body">如您对隐私政策有任何疑问，请通过应用内「管理后台」联系管理员，我们会尽快处理。</text>
+      </view>
+      <text class="update-time">更新日期：2026年4月13日</text>
+      <!-- 占位 -->
+      <view style="height:120rpx"></view>
+    </view>
+  </scroll-view>
+
+  <!-- 未滚到底部 -->
+  <view class="bottom-bar" wx:if="{{!reachedBottom}}">
+    <text class="bottom-hint">📜 请向上滚动完整阅读隐私政策</text>
+  </view>
+
+  <!-- 滚到底部后可确认 -->
+  <view class="bottom-bar" wx:if="{{reachedBottom}}">
+    <view class="confirm-btn" bindtap="handleConfirm">已阅读并同意隐私政策</view>
+  </view>
+</view>

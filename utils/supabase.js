@@ -64,6 +64,7 @@ class QueryBuilder {
   gte(col, val) { this._params.push(encodeURIComponent(col) + '=gte.' + encodeURIComponent(val)); return this }
   lte(col, val) { this._params.push(encodeURIComponent(col) + '=lte.' + encodeURIComponent(val)); return this }
   is(col, val) { this._params.push(encodeURIComponent(col) + '=is.' + encodeURIComponent(String(val))); return this }
+  in(col, vals) { this._params.push(encodeURIComponent(col) + '=in.(' + vals.map(v => encodeURIComponent(String(v))).join(',') + ')'); return this }
   order(col, opts) { this._orders.push(encodeURIComponent(col) + '.' + (opts && opts.ascending === false ? 'desc' : 'asc')); return this }
   limit(n) { this._params.push('limit=' + n); return this }
   single() { this._headers['Accept'] = 'application/vnd.pgrst.object+json'; return this }

@@ -1,40 +1,65 @@
-<!--pages/login/login.wxml-->
-<view class="container">
-  <!-- 背景装饰 -->
-  <view class="bg-circle bg-circle-1"></view>
-  <view class="bg-circle bg-circle-2"></view>
+// pages/login/login.wxml
+<view class="page">
 
-  <!-- Logo 区域 -->
-  <view class="logo-area">
-    <image class="logo-img" src="/assets/icons/logo.png" mode="aspectFit"/>
-    <text class="logo-name">{{appName}}</text>
-    <text class="logo-sub">智能记账，轻松理财</text>
+  <!-- 顶部装饰背景 -->
+  <view class="top-bg">
+    <view class="top-circle top-circle-1"></view>
+    <view class="top-circle top-circle-2"></view>
+    <view class="top-circle top-circle-3"></view>
+    <!-- Logo 区 -->
+    <view class="logo-area">
+      <view class="logo-icon">💰</view>
+      <text class="logo-name">游游记账</text>
+      <text class="logo-slogan">智能记账，轻松理财</text>
+    </view>
   </view>
 
-  <!-- 登录/注册表单 -->
+  <!-- 表单卡片 -->
   <view class="form-card">
-    <!-- 模式切换 -->
+
+    <!-- Tab 切换 -->
     <view class="mode-tabs" wx:if="{{mode !== 'forgot'}}">
       <view class="mode-tab {{mode==='login'?'active':''}}" bindtap="switchMode" data-mode="login">登录</view>
       <view class="mode-tab {{mode==='signup'?'active':''}}" bindtap="switchMode" data-mode="signup">注册</view>
     </view>
 
+    <!-- 微信一键注册 -->
+    <block wx:if="{{showWechatRegister}}">
+      <view class="wechat-register-card">
+        <text class="wrc-icon">💬</text>
+        <text class="wrc-title">检测到微信用户</text>
+        <text class="wrc-desc">一键创建账号，无需填写信息</text>
+        <view class="agree-row" bindtap="toggleAgree">
+          <view class="agree-checkbox {{agreedPrivacy?'checked':''}}">
+            <text wx:if="{{agreedPrivacy}}" class="agree-check-icon">✓</text>
+          </view>
+          <text class="agree-text">我已阅读并同意</text>
+          <text class="agree-link" catchtap="goAgreement">《用户协议》</text>
+          <text class="agree-text">和</text>
+          <text class="agree-link" catchtap="goPrivacy">《隐私政策》</text>
+        </view>
+        <view class="wrc-btn {{agreedPrivacy?'':'wrc-btn-disabled'}}" bindtap="handleWechatRegister">{{loading?'创建中...':'一键注册'}}</view>
+        <text class="wrc-cancel" bindtap="switchMode" data-mode="login">使用邮箱登录</text>
+      </view>
+    </block>
+
     <!-- 登录表单 -->
-    <block wx:if="{{mode==='login'}}">
+    <block wx:if="{{mode==='login' && !showWechatRegister}}">
       <view class="input-group">
-        <text class="input-label">用户名 / 邮箱</text>
-        <input class="input-field" placeholder="请输入用户名或邮箱" value="{{loginId}}" bindinput="onLoginIdInput" confirm-type="next"/>
+        <text class="input-label">账号</text>
+        <input class="input-field" placeholder="用户名或邮箱" value="{{loginId}}" bindinput="onLoginIdInput" confirm-type="next" />
       </view>
       <view class="input-group">
         <text class="input-label">密码</text>
         <view class="password-wrap">
-          <input class="input-field" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" password="{{!showPwd}}" confirm-type="done" bindconfirm="handleLogin"/>
+          <input class="input-field" placeholder="请输入密码" value="{{password}}" bindinput="onPasswordInput" password="{{!showPwd}}" confirm-type="done" bindconfirm="handleLogin" />
           <text class="pwd-toggle" bindtap="togglePwd">{{showPwd?'🙈':'👁'}}</text>
         </view>
       </view>
       <view class="forgot-link" bindtap="switchMode" data-mode="forgot">忘记密码？</view>
-      <button class="btn-submit {{loading?'disabled':''}}" bindtap="handleLogin" disabled="{{loading}}">
-        {{loading ? '登录中...' : '登 录'}}
+      <button class="btn-primary {{loading?'btn-loading':''}}" bindtap="handleLogin" disabled="{{loading}}">
+        <text wx:if="{{!loading}}">登 录</text>
+        <text wx:if="{{loading}}">登录中...</text>
       </button>
     </block>
 
@@ -42,32 +67,82 @@
     <block wx:if="{{mode==='signup'}}">
       <view class="input-group">
         <text class="input-label">用户名</text>
-        <input class="input-field" placeholder="设置用户名（字母/数字）" value="{{username}}" bindinput="onUsernameInput" confirm-type="next"/>
+        <input class="input-field" placeholder="设置用户名（字母/数字）" value="{{username}}" bindinput="onUsernameInput" confirm-type="next" />
       </view>
       <view class="input-group">
         <text class="input-label">密码</text>
         <view class="password-wrap">
-          <input class="input-field" placeholder="至少6位密码" value="{{password}}" bindinput="onPasswordInput" password="{{!showPwd}}" confirm-type="done"/>
+          <input class="input-field" placeholder="至少6位密码" value="{{password}}" bindinput="onPasswordInput" password="{{!showPwd}}" confirm-type="next" />
           <text class="pwd-toggle" bindtap="togglePwd">{{showPwd?'🙈':'👁'}}</text>
         </view>
       </view>
-      <button class="btn-submit {{loading?'disabled':''}}" bindtap="handleSignup" disabled="{{loading}}">
-        {{loading ? '注册中...' : '注 册'}}
+      <view class="input-group">
+        <text class="input-label">邮箱</text>
+        <input class="input-field" placeholder="输入真实邮箱地址" value="{{email}}" bindinput="onEmailInput" confirm-type="done" />
+      </view>
+
+      <!-- 协议勾选行 -->
+      <view class="agree-row" bindtap="toggleAgree">
+        <view class="agree-checkbox {{agreedPrivacy?'checked':''}}">
+          <text wx:if="{{agreedPrivacy}}" class="agree-check-icon">✓</text>
+        </view>
+        <text class="agree-text">我已阅读并同意</text>
+        <text class="agree-link" catchtap="goAgreement">《用户协议》</text>
+        <text class="agree-text">和</text>
+        <text class="agree-link" catchtap="goPrivacy">《隐私政策》</text>
+      </view>
+
+      <button class="btn-primary btn-signup {{!agreedPrivacy?'btn-disabled':''}} {{loading?'btn-loading':''}}" bindtap="handleSendCode" disabled="{{loading || !agreedPrivacy}}">
+        <text wx:if="{{!loading}}">发送验证码</text>
+        <text wx:if="{{loading}}">发送中...</text>
       </button>
+    </block>
+
+    <!-- 验证码表单 -->
+    <block wx:if="{{mode==='verify'}}">
+      <view class="verify-hint">
+        <text class="verify-hint-icon">📧</text>
+        <text class="verify-hint-text">验证码已发送至</text>
+        <text class="verify-hint-email">{{emailMask}}</text>
+      </view>
+      <view class="input-group">
+        <input class="verify-code-input" type="text" maxlength="6" value="{{verifyCode}}" bindinput="onVerifyCodeInput" placeholder="请输入6位验证码" />
+      </view>
+      <button class="btn-primary {{loading?'btn-loading':''}}" bindtap="handleVerify" disabled="{{loading}}">
+        <text wx:if="{{!loading}}">验证并注册</text>
+        <text wx:if="{{loading}}">验证中...</text>
+      </button>
+      <view class="resend-row">
+        <text class="resend-text" wx:if="{{countdown > 0}}">{{countdown}}秒后可重新发送</text>
+        <text class="resend-link" wx:if="{{countdown <= 0}}" bindtap="handleResendCode">重新发送验证码</text>
+      </view>
     </block>
 
     <!-- 忘记密码 -->
     <block wx:if="{{mode==='forgot'}}">
-      <view class="back-btn" bindtap="switchMode" data-mode="login">← 返回登录</view>
+      <text class="forgot-title">找回密码</text>
+      <text class="forgot-desc">输入注册时填写的邮箱，我们会发送重置链接</text>
       <view class="input-group">
         <text class="input-label">注册邮箱</text>
-        <input class="input-field" placeholder="请输入注册时的邮箱" value="{{email}}" bindinput="onEmailInput" confirm-type="done"/>
+        <input class="input-field" placeholder="请输入注册时的邮箱" value="{{email}}" bindinput="onEmailInput" confirm-type="done" />
       </view>
-      <button class="btn-submit" bindtap="handleForgot" disabled="{{loading}}">
-        {{loading ? '发送中...' : '发送重置邮件'}}
+      <button class="btn-primary {{loading?'btn-loading':''}}" bindtap="handleForgot" disabled="{{loading}}">
+        <text wx:if="{{!loading}}">发送重置邮件</text>
+        <text wx:if="{{loading}}">发送中...</text>
       </button>
+      <text class="back-link" bindtap="switchMode" data-mode="login">← 返回登录</text>
     </block>
+
   </view>
 
-  <text class="footer-text">{{appName}} · 智能记账</text>
+  <!-- 底部 -->
+  <view class="page-footer">
+    <text class="footer-version">游游记账 v4.0.1</text>
+    <view class="footer-links-row">
+      <text class="footer-link" bindtap="goAgreement">用户协议</text>
+      <text class="footer-sep">|</text>
+      <text class="footer-link" bindtap="goPrivacy">隐私政策</text>
+    </view>
+  </view>
+
 </view>

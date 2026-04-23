@@ -1,49 +1,75 @@
-<!--pages/ledgers/ledgers.wxml-->
 <view class="page">
-  <view class="header">
-    <text class="page-title">📚 账本管理</text>
-    <view class="add-btn" bindtap="toggleCreate">
-      <text>+ 新建账本</text>
-    </view>
+<view class="header-card">
+  <view class="header-circle header-circle1"></view>
+  <view class="header-circle header-circle2"></view>
+  <text class="header-title">账本管理</text>
+  <text class="header-sub">选择或创建账本，星标设为默认</text>
+</view>
+
+<!-- 新建按钮/表单 -->
+<view class="create-card" bindtap="toggleCreate" wx:if="{{!showCreate}}">
+  <text class="create-icon">➕</text>
+  <text class="create-text">新建账本</text>
+  <text class="create-arrow {{showCreate?'rotate':''}}">▼</text>
+</view>
+
+<view class="create-form" wx:if="{{showCreate}}">
+  <view class="form-row">
+    <input class="card-input" placeholder="输入账本名称" value="{{newName}}" bindinput="onNameInput"/>
   </view>
-
-  <!-- 新建表单 -->
-  <view class="create-card" wx:if="{{showCreate}}">
-    <text class="create-title">创建新账本</text>
-    <input class="create-input" placeholder="输入账本名称" value="{{newName}}" bindinput="onNameInput" focus="{{showCreate}}"/>
-    <view class="btn-row">
-      <button class="btn-confirm" bindtap="handleCreate" disabled="{{!newName||creating}}">
-        {{creating?'创建中...':'确认创建'}}
-      </button>
-      <button class="btn-cancel" bindtap="toggleCreate">取消</button>
-    </view>
+  <view class="form-btns">
+    <view class="primary-btn" bindtap="handleCreate">创建</view>
+    <view class="secondary-btn" bindtap="toggleCreate">取消</view>
   </view>
+</view>
 
-  <!-- 加载 -->
-  <view class="loading" wx:if="{{loading}}"><text>加载中...</text></view>
+<view class="loading" wx:if="{{loading}}">
+  <text class="loading-text">加载中...</text>
+</view>
 
-  <!-- 账本列表 -->
-  <view class="ledger-list" wx:else>
-    <view class="ledger-item {{item.id===currentLedger.id?'active':''}} {{item.id===confirmLedgerId?'just-switched':''}}"
-      wx:for="{{ledgers}}" wx:key="id" bindtap="switchLedger" data-index="{{index}}">
-      <view class="li-left">
-        <text class="li-icon">📖</text>
-        <view class="li-info">
-          <text class="li-name">{{item.name}}</text>
-          <text class="li-date">{{item.created_at}}</text>
+<view class="section-header" wx:if="{{!loading}}">
+  <text class="section-title">📚 我的账本</text>
+</view>
+
+<view class="ledger-list" wx:if="{{!loading}}">
+  <block wx:for="{{ledgers}}" wx:key="id">
+    <view class="ledger-item {{currentLedger && currentLedger.id===item.id?'current':''}}" bindtap="switchLedger" data-index="{{index}}">
+      <!-- 默认标签 -->
+      <view class="default-tag" wx:if="{{getDefaultId() === item.id}}">⭐ 默认</view>
+      
+      <view class="ledger-main">
+        <view class="ledger-icon">📒</view>
+        <view class="ledger-info">
+          <text class="ledger-name">{{item.name}}</text>
+          <text class="ledger-date">{{item.created_at}}</text>
+        </view>
+        <view class="ledger-check" wx:if="{{currentLedger && currentLedger.id===item.id}}">✓</view>
+      </view>
+      
+      <view class="ledger-actions">
+        <!-- 设为默认按钮 -->
+        <view class="action-btn {{getDefaultId() === item.id ? 'default-active' : ''}}" 
+              catchtap="setDefault" data-index="{{index}}">
+          <text>{{getDefaultId() === item.id ? '⭐ 已默认' : '☆ 默认'}}</text>
+        </view>
+        <!-- 切换按钮 -->
+        <view class="action-btn switch-btn" 
+              wx:if="{{!(currentLedger && currentLedger.id===item.id)}}" 
+              catchtap="switchLedger" data-index="{{index}}">
+          <text>切换</text>
+        </view>
+        <!-- 删除按钮 -->
+        <view class="action-btn del-btn" catchtap="handleDelete" data-index="{{index}}">
+          <text>删除</text>
         </view>
       </view>
-      <view class="li-right">
-        <text class="li-badge active-badge" wx:if="{{item.id===currentLedger.id}}">当前</text>
-        <text class="li-badge default-badge" wx:if="{{item.owner_id===user.id}}">创建者</text>
-        <text class="li-del" catchtap="handleDelete" data-index="{{index}}">🗑</text>
-      </view>
     </view>
+  </block>
+</view>
 
-    <view class="empty" wx:if="{{ledgers.length===0}}">
-      <text class="empty-icon">📖</text>
-      <text class="empty-text">还没有账本</text>
-      <text class="empty-sub">点击右上角创建第一个账本</text>
-    </view>
-  </view>
+<view class="empty" wx:if="{{!loading && ledgers.length === 0}}">
+  <text class="empty-icon">📭</text>
+  <text class="empty-text">还没有账本</text>
+  <text class="empty-hint">点击上方按钮创建</text>
+</view>
 </view>
