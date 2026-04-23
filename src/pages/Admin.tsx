@@ -508,12 +508,23 @@ export function Admin() {
 
   const loadUsers = async () => {
     setIsLoading(true)
-    const [{ data: usersData }, { data: settingData }] = await Promise.all([
-      supabase.from('users').select('*').order('created_at', { ascending: false }),
-      supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
-    ])
-    setUsers((usersData || []) as any[])
-    setAutoApprove(settingData?.value === 'true')
+    try {
+      const [{ data: usersData }, { data: settingData, error: settingError }] = await Promise.all([
+        supabase.from('users').select('*').order('created_at', { ascending: false }),
+        supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+      ])
+      console.log('[Admin] settingData:', settingData, 'error:', settingError)
+      setUsers((usersData || []) as any[])
+      // 如果查询失败或数据不存在，默认关闭
+      if (settingError) {
+        console.log('[Admin] using default autoApprove=false')
+        setAutoApprove(false)
+      } else {
+        setAutoApprove(settingData?.value === 'true')
+      }
+    } catch (e) {
+      console.error('[Admin] loadUsers error:', e)
+    }
     setIsLoading(false)
   }
 
@@ -838,6 +849,7 @@ export function Admin() {
             <button onClick={toggleAutoApprove} style={{ width: 52, height: 28, borderRadius: 14, border: 'none', background: autoApprove ? '#6366f1' : '#d1d5db', cursor: 'pointer', position: 'relative', transition: 'background 0.3s', flexShrink: 0 }}>
               <div style={{ width: 22, height: 22, borderRadius: 11, background: 'white', position: 'absolute', top: 3, left: autoApprove ? 27 : 3, transition: 'left 0.3s', boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }}/>
             </button>
+            <button onClick={loadUsers} style={{ marginLeft: 8, padding: '4px 12px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 8, background: 'white', cursor: 'pointer' }}>刷新</button>
           </div>
 
           {isLoading ? (
