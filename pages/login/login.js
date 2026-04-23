@@ -69,16 +69,21 @@ Page({
     cb(cachedUser)  // 查询失败则用缓存（网络问题等）
   },
 
-    // 更新用户最后登录时间（调用 Edge Function）
+    // 更新用户最后登录时间（直接用 REST API）
   async _updateLastLogin(userId) {
     try {
-      const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MTI1NDIsImV4cCI6MjA4OTk4ODU0Mn0.eoAm3WjrCYPyuw2JB6M2QUe5QSyP4GkMGg2Buj57fb4'
+      const token = wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY
       await new Promise((resolve) => {
         wx.request({
-          url: SUPABASE_URL + '/functions/v1/update-last-login',
-          method: 'POST',
-          header: { 'Content-Type': 'application/json', 'apikey': ANON, 'Authorization': 'Bearer ' + ANON },
-          data: { user_id: userId },
+          url: SUPABASE_URL + '/rest/v1/users?id=eq.' + userId,
+          method: 'PATCH',
+          header: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + token,
+            'Prefer': 'return=minimal'
+          },
+          data: { last_login: new Date().toISOString() },
           success: r => resolve(r),
           fail: () => resolve(null)
         })
