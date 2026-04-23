@@ -135,7 +135,7 @@ Page({
       console.log('[loadUsers] first user status:', data[0].status)
       console.log('[loadUsers] first user role:', data[0].role)
     }
-    // 计算活跃度
+    // 计算活跃度 + 预处理日期格式
     const now = Date.now()
     const withActivity = (data || []).map(u => {
       let activity = '从未登录'
@@ -149,7 +149,10 @@ Page({
         else if (days <= 180){ activity = '不活跃'; activityClass = 'inactive' }
         else               { activity = '僵尸';   activityClass = 'zombie' }
       }
-      return { ...u, activity, activityClass }
+      // 预处理日期格式（WXML 不支持 .slice() 方法调用）
+      const createdDate = u.created_at ? u.created_at.slice(0, 10) : '--'
+      const loginDate = u.last_login ? u.last_login.slice(0, 10) : '--'
+      return { ...u, activity, activityClass, createdDate, loginDate }
     })
     console.log('[loadUsers] setting users:', withActivity.length)
     if (withActivity[0]) {

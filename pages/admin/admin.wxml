@@ -134,8 +134,8 @@
   </view>
   <!-- 第三行：注册时间 + 最后登录 -->
   <view class="user-row3">
-    <text class="user-date">注册: {{item.created_at ? item.created_at.slice(0,10) : '--'}}</text>
-    <text class="user-login">登录: {{item.last_login ? item.last_login.slice(0,10) : '--'}}</text>
+    <text class="user-date">注册: {{item.createdDate}}</text>
+    <text class="user-login">登录: {{item.loginDate}}</text>
   </view>
   <!-- 操作按钮 -->
   <view class="user-actions">
