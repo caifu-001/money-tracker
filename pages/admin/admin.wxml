@@ -121,28 +121,29 @@
 <view class="section-title">用户列表</view>
 <view class="user-list">
 <view class="user-item" wx:for="{{users}}" wx:key="id">
-<view class="user-info">
-<text class="user-name">{{item.name || '未设置昵称'}}</text>
-<text class="user-email">{{item.email || ''}}</text>
-</view>
-<view class="user-meta">
-<view class="user-date">{{item.created_at?item.created_at.slice(0,10):'--无日期--'}}</view>
-<view class="activity-badge {{item.activityClass}}">{{item.activity}}</view>
-<view class="user-login">{{item.last_login?item.last_login.slice(0,10):'--未登录--'}}</view>
-</view>
-<view class="user-status">
-<text class="status-tag {{item.status}}">{{item.status==='active'?'正常':item.status==='pending'?'待审核':'已禁用'}}</text>
-</view>
-<view class="user-actions" wx:if="{{item.status==='pending'}}">
-<text class="action-btn approve" bindtap="handleApproveUser" data-id="{{item.id}}">通过</text>
-</view>
-<view class="user-actions" wx:if="{{item.status==='active'}}">
-<text class="action-btn disable" bindtap="handleDisableUser" data-id="{{item.id}}">禁用</text>
-</view>
-<view class="user-actions" wx:if="{{item.status==='disabled'}}">
-<text class="action-btn enable" bindtap="handleEnableUser" data-id="{{item.id}}">启用</text>
-<text class="action-btn delete" bindtap="handleDeleteUser" data-id="{{item.id}}">删除</text>
-</view>
+  <!-- 第一行：用户名 + 状态徽章 + 活跃度 -->
+  <view class="user-row1">
+    <text class="user-name">{{item.name || '未设置昵称'}}</text>
+    <text class="status-tag {{item.status}}" style="background: {{item.status==='active'?'#d1fae5':item.status==='pending'?'#fef3c7':'#fee2e2'}}; color: {{item.status==='active'?'#059669':item.status==='pending'?'#d97706':'#ef4444'}};">{{item.status==='active'?'正常':item.status==='pending'?'待审核':'已禁用'}}</text>
+    <text class="activity-badge {{item.activityClass}}" style="background: {{item.activityClass==='online'?'#d1fae5':item.activityClass==='active'?'#dbeafe':item.activityClass==='normal'?'#fef3c7':item.activityClass==='inactive'?'#ffedd5':'#f3f4f6'}}; color: {{item.activityClass==='online'?'#059669':item.activityClass==='active'?'#2563eb':item.activityClass==='normal'?'#d97706':item.activityClass==='inactive'?'#ea580c':'#9ca3af'}};">{{item.activity}}</text>
+    <text class="role-tag" style="background: #ede9fe; color: #7c3aed;">{{item.role==='admin'?'管理员':'用户'}}</text>
+  </view>
+  <!-- 第二行：邮箱 -->
+  <view class="user-row2">
+    <text class="user-email">{{item.email || ''}}</text>
+  </view>
+  <!-- 第三行：注册时间 + 最后登录 -->
+  <view class="user-row3">
+    <text class="user-date">注册: {{item.created_at?item.created_at.slice(0,10):'--'}}</text>
+    <text class="user-login">登录: {{item.last_login?item.last_login.slice(0,10):'--'}}</text>
+  </view>
+  <!-- 操作按钮 -->
+  <view class="user-actions">
+    <text class="action-btn approve" wx:if="{{item.status==='pending'}}" bindtap="handleApproveUser" data-id="{{item.id}}">通过</text>
+    <text class="action-btn disable" wx:if="{{item.status==='active'}}" bindtap="handleDisableUser" data-id="{{item.id}}">禁用</text>
+    <text class="action-btn enable" wx:if="{{item.status==='disabled'}}" bindtap="handleEnableUser" data-id="{{item.id}}">启用</text>
+    <text class="action-btn delete" wx:if="{{item.status==='disabled'}}" bindtap="handleDeleteUser" data-id="{{item.id}}">删除</text>
+  </view>
 </view>
 </view>
 </block>

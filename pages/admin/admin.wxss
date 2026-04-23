@@ -133,37 +133,47 @@ page { background: #f0f2f7; }
 .user-item {
   background: #fff; border-radius: 20rpx;
   padding: 24rpx 28rpx;
-  display: flex; align-items: flex-start;
-  gap: 16rpx;
+  display: flex; flex-direction: column; gap: 12rpx;
   box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06);
-  min-height: 120rpx;
 }
-.user-info { flex: 1; min-width: 0; }
-.user-meta {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 8rpx;
-  width: 180rpx; flex-shrink: 0;
-  background: #f0f9ff; border: 2rpx solid #ddd; border-radius: 12rpx; padding: 10rpx 14rpx;
+/* 第一行：用户名 + 状态 + 活跃度 */
+.user-row1 {
+  display: flex; align-items: center; gap: 12rpx;
 }
-.user-date { font-size: 20rpx; color: #bbb; white-space: nowrap; }
-.user-login { font-size: 18rpx; color: #ccc; white-space: nowrap; }
-.user-name { display: block; font-size: 28rpx; color: #1f2937; font-weight: 600; }
-.user-email { display: block; font-size: 22rpx; color: #9ca3af; margin-top: 4rpx; }
-.user-status { margin-right: 16rpx; }
+.user-name { font-size: 30rpx; color: #1f2937; font-weight: 600; }
+.status-tag {
+  font-size: 22rpx; padding: 6rpx 16rpx; border-radius: 20rpx; font-weight: 600;
+}
+.status-tag.active { background: #d1fae5; color: #059669; }
+.status-tag.pending { background: #fef3c7; color: #d97706; }
+.status-tag.disabled { background: #fee2e2; color: #ef4444; }
 .activity-badge {
-  font-size: 18rpx; font-weight: 700; padding: 4rpx 14rpx;
-  border-radius: 20rpx; white-space: nowrap;
+  font-size: 22rpx; font-weight: 700; padding: 6rpx 16rpx;
+  border-radius: 20rpx;
 }
 .activity-badge.online    { background: #d1fae5; color: #059669; }
 .activity-badge.active   { background: #dbeafe; color: #2563eb; }
 .activity-badge.normal   { background: #fef3c7; color: #d97706; }
-.activity-badge.inactive { background: #fee2e2; color: #f97316; }
+.activity-badge.inactive { background: #ffedd5; color: #ea580c; }
 .activity-badge.zombie   { background: #f3f4f6; color: #9ca3af; }
-.status-tag { font-size: 20rpx; padding: 6rpx 16rpx; border-radius: 20rpx; font-weight: 500; }
-.status-tag.active { background: #d1fae5; color: #059669; }
-.status-tag.pending { background: #fef3c7; color: #d97706; }
-.status-tag.disabled { background: #fee2e2; color: #ef4444; }
-.user-actions { display: flex; gap: 8rpx; }
-.action-btn { font-size: 22rpx; padding: 8rpx 16rpx; border-radius: 16rpx; font-weight: 500; }
+/* 第二行：邮箱 + 角色 */
+.user-row2 {
+  display: flex; align-items: center; gap: 16rpx;
+}
+.user-email { font-size: 24rpx; color: #6b7280; }
+.role-tag {
+  font-size: 22rpx; padding: 4rpx 12rpx; border-radius: 16rpx;
+  background: #ede9fe; color: #7c3aed; font-weight: 500;
+}
+/* 第三行：注册时间 + 最后登录 */
+.user-row3 {
+  display: flex; align-items: center; gap: 24rpx;
+}
+.user-date { font-size: 22rpx; color: #9ca3af; }
+.user-login { font-size: 22rpx; color: #9ca3af; }
+/* 操作按钮 */
+.user-actions { display: flex; gap: 8rpx; margin-top: 8rpx; }
+.action-btn { font-size: 24rpx; padding: 10rpx 20rpx; border-radius: 16rpx; font-weight: 500; }
 .action-btn.approve { background: #d1fae5; color: #059669; }
 .action-btn.disable { background: #fef3c7; color: #d97706; }
 .action-btn.enable { background: #dbeafe; color: #2563eb; }
