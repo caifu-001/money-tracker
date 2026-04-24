@@ -267,7 +267,11 @@ export function UserManagement() {
                 {/* 第三行：注册时间 + 最后登录 */}
                 <div className="flex items-center gap-4 mb-3">
                   <span style={{ fontSize: '13px', color: '#6b7280' }}>注册: {fmtDate(u.created_at)}</span>
-                  <span style={{ fontSize: '13px', color: '#6b7280' }}>登录: {fmtDate(u.last_login)}</span>
+                  {u.last_login ? (
+                    <span style={{ fontSize: '13px', color: '#6b7280' }}>最后登录: {fmtDate(u.last_login)}</span>
+                  ) : (
+                    <span style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>最后登录: 从未登录</span>
+                  )}
                 </div>
 
                 {/* 操作按钮 */}
