@@ -220,7 +220,7 @@ Page({
   async toggleAutoApprove() {
     const { autoApprove, user } = this.data
     const newVal = !autoApprove
-    console.log('[toggleAutoApprove] current:', autoApprove, 'new:', newVal)
+    console.log('[toggleAutoApprove] current:', autoApprove, 'new:', newVal, 'user:', user?.id)
     // 先尝试更新，不存在则插入（绕过 RLS 的 upsert 限制）
     const { error: updateError } = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
     console.log('[toggleAutoApprove] update error:', updateError?.message || 'none')
@@ -233,8 +233,11 @@ Page({
         return
       }
     }
-    this.setData({ autoApprove: newVal })
-    wx.showToast({ title: newVal ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
+    // 立即查询确认
+    const { data: checkData } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+    console.log('[toggleAutoApprove] DB value after update:', checkData?.value)
+    this.setData({ autoApprove: checkData?.value === 'true' })
+    wx.showToast({ title: checkData?.value === 'true' ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
   },
 
   async handleApproveUser(e) {
