@@ -506,24 +506,37 @@ export function Admin() {
   const [creating, setCreating] = useState(false)
   const [autoApprove, setAutoApprove] = useState(false)
 
+  const loadAutoApprove = async () => {
+    try {
+      console.log('[Admin] loadAutoApprove - fetching...')
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'auto_approve')
+        .maybeSingle()
+      console.log('[Admin] loadAutoApprove - data:', data, 'error:', error?.message || 'none')
+      if (error) {
+        console.log('[Admin] loadAutoApprove - error, defaulting to false')
+        setAutoApprove(false)
+      } else {
+        const newVal = data?.value === 'true'
+        console.log('[Admin] loadAutoApprove - setting to:', newVal, 'raw:', data?.value)
+        setAutoApprove(newVal)
+      }
+    } catch (e) {
+      console.error('[Admin] loadAutoApprove error:', e)
+    }
+  }
+
   const loadUsers = async () => {
     setIsLoading(true)
     try {
-      const [{ data: usersData }, { data: settingData, error: settingError }] = await Promise.all([
-        supabase.from('users').select('*').order('created_at', { ascending: false }),
-        supabase.from('app_settings').select('value').eq('key', 'auto_approve').maybeSingle()
-      ])
-      console.log('[Admin] loadUsers - settingData:', settingData, 'settingError:', settingError?.message || 'none')
+      const { data: usersData, error: usersError } = await supabase.from('users').select('*').order('created_at', { ascending: false })
+      if (usersError) console.error('[Admin] loadUsers - users error:', usersError.message)
+      console.log('[Admin] loadUsers - users count:', usersData?.length || 0)
       setUsers((usersData || []) as any[])
-      // 如果查询失败或数据不存在，默认关闭
-      if (settingError) {
-        console.log('[Admin] loadUsers - using default autoApprove=false, error:', settingError.message)
-        setAutoApprove(false)
-      } else {
-        const newVal = settingData?.value === 'true'
-        console.log('[Admin] loadUsers - setting autoApprove to:', newVal, 'raw value:', settingData?.value)
-        setAutoApprove(newVal)
-      }
+      // 单独加载 autoApprove 设置
+      await loadAutoApprove()
     } catch (e) {
       console.error('[Admin] loadUsers error:', e)
     }
@@ -567,8 +580,8 @@ export function Admin() {
     }
     setAutoApprove(newVal)
     console.log('[toggleAutoApprove] success, new state:', newVal)
-    // 重新加载用户列表以确保状态同步
-    await loadUsers()
+    // 重新加载设置以确保状态同步
+    await loadAutoApprove()
   }
 
   // 授权为管理员（仅超级管理员可操作）
