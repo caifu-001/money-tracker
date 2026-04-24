@@ -228,25 +228,23 @@ Page({
       return
     }
     
-    // 先尝试更新，不存在则插入（绕过 RLS 的 upsert 限制）
-    const { error: updateError } = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
-    console.log('[toggleAutoApprove] update error:', updateError?.message || 'none')
-    if (updateError) {
-      // 更新失败（可能行不存在），尝试插入
-      const { error: insertError } = await supabase.from('app_settings').insert([{ key: 'auto_approve', value: String(newVal) }])
-      console.log('[toggleAutoApprove] insert error:', insertError?.message || 'none')
-      if (insertError) {
-        wx.showToast({ title: insertError.message || '修改失败', icon: 'none' })
-        return
-      }
-    }
-    // 立即查询确认
-    const { data: checkData, error: checkError } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
-    console.log('[toggleAutoApprove] DB value after update:', checkData?.value, 'checkError:', checkError?.message || 'none')
+    // 先尝试直接更新
+    const updateResult = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
+    console.log('[toggleAutoApprove] update result:', JSON.stringify(updateResult))
     
+    // 立即查询确认
+    let { data: checkData } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+    console.log('[toggleAutoApprove] DB value after direct update:', checkData?.value)
+    
+    // 如果直接更新未生效，可能是 RLS 问题，提示用户
     if (checkData?.value !== String(newVal)) {
-      console.error('[toggleAutoApprove] 数据库更新未生效！可能是 RLS 策略限制')
-      wx.showToast({ title: '更新未生效，请检查权限', icon: 'none' })
+      console.error('[toggleAutoApprove] 直接更新未生效！当前用户角色:', user?.role)
+      console.error('[toggleAutoApprove] 请在 Supabase Dashboard 执行: ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;')
+      wx.showModal({
+        title: '更新失败',
+        content: '数据库权限限制，请联系超级管理员在 Supabase 中设置 RLS 策略',
+        showCancel: false
+      })
       return
     }
     

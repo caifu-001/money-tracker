@@ -90,6 +90,7 @@ class QueryBuilder {
       console.log('[supabase]', this._method, this._url + qs, JSON.stringify(this._body))
     }
     wxRequest(this._method, this._url + qs, this._body, this._headers).then((res) => {
+      console.log('[supabase] response status:', res.statusCode, 'data:', JSON.stringify(res.data))
       if (res.statusCode === 401 && !this._retried) {
         this._retried = true
         refreshToken().then(() => {
