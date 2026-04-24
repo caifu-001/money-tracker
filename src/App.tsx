@@ -44,6 +44,8 @@ async function fetchUserAndLedger(
         name: userData.name || currentUser.user_metadata?.name || '',
         role: userRole
       })
+      // 更新最后登录时间
+      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', currentUser.id)
     } else {
       setUser({
         id: currentUser.id,

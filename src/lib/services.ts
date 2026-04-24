@@ -66,6 +66,9 @@ export const authService = {
         await supabase.auth.signOut()
         return { data: null, error: new Error('账号已被禁用，请联系管理员') }
       }
+      
+      // 更新最后登录时间
+      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', data.user.id)
     }
 
     return { data, error }
