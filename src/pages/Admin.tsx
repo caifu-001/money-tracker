@@ -511,7 +511,7 @@ export function Admin() {
     try {
       const [{ data: usersData }, { data: settingData, error: settingError }] = await Promise.all([
         supabase.from('users').select('*').order('created_at', { ascending: false }),
-        supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+        supabase.from('app_settings').select('value').eq('key', 'auto_approve').maybeSingle()
       ])
       console.log('[Admin] loadUsers - settingData:', settingData, 'settingError:', settingError?.message || 'none')
       setUsers((usersData || []) as any[])
