@@ -1,6 +1,8 @@
 // utils/supabase.js - 微信小程序版 Supabase 客户端（修复版）
 const SUPABASE_URL = 'https://abkscyijuvkfeazhlquz.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFia3NjeWlqdXZrZmVhemhscXV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MTI1NDIsImV4cCI6MjA4OTk4ODU0Mn0.eoAm3WjrCYPyuw2JB6M2QUe5QSyP4GkMGg2Buj57fb4'
+// Service Role Key - 仅用于绕过 RLS 的管理操作（已脱敏，实际使用时需要完整 key）
+const SUPABASE_SERVICE_KEY = null // 用户需要填写完整的 service_role key
 
 let _refreshing = null
 
