@@ -73,8 +73,9 @@ Page({
   async _updateLastLogin(userId) {
     try {
       const token = wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY
-      console.log('[_updateLastLogin] Updating for user:', userId)
-      console.log('[_updateLastLogin] Token:', token.substring(0, 20) + '...')
+      console.log('[_updateLastLogin] ====== 开始更新 last_login ======')
+      console.log('[_updateLastLogin] 用户ID:', userId)
+      console.log('[_updateLastLogin] Token 前20位:', token.substring(0, 20) + '...')
       const res = await new Promise((resolve) => {
         wx.request({
           url: SUPABASE_URL + '/rest/v1/users?id=eq.' + userId,
@@ -86,13 +87,22 @@ Page({
             'Prefer': 'return=minimal'
           },
           data: { last_login: new Date().toISOString() },
-          success: r => resolve(r),
-          fail: () => resolve(null)
+          success: r => {
+            console.log('[_updateLastLogin] 请求成功，状态码:', r.statusCode)
+            resolve(r)
+          },
+          fail: (e) => {
+            console.error('[_updateLastLogin] 请求失败:', e)
+            resolve(null)
+          }
         })
       })
-      console.log('[_updateLastLogin] Response:', res.statusCode, res.data)
+      console.log('[_updateLastLogin] 完整响应:', JSON.stringify(res))
+      console.log('[_updateLastLogin] ====== 更新完成 ======')
+      return res
     } catch(e) {
-      console.error('[_updateLastLogin] Error:', e)
+      console.error('[_updateLastLogin] 异常:', e)
+      return null
     }
   },
 
@@ -140,7 +150,9 @@ Page({
         }
         // 自动登录成功
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
-        this._updateLastLogin(user.id)
+        console.log('[tryWechatLogin] 微信登录成功，准备更新 last_login，用户ID:', user.id)
+        await this._updateLastLogin(user.id)
+        console.log('[tryWechatLogin] last_login 更新完成')
         let ledger = null
         // 查询 own + member 账本
         const [ownRes, memberRes] = await Promise.all([
@@ -435,7 +447,9 @@ Page({
       }
 
       const user = { id: data.user.id, email: data.user.email, name: (userData && userData.name) || loginId, role: (userData && userData.role) || 'user' }
-      this._updateLastLogin(user.id)
+      console.log('[handleLogin] 登录成功，准备更新 last_login，用户ID:', user.id)
+      await this._updateLastLogin(user.id)
+      console.log('[handleLogin] last_login 更新完成')
       const { data: ledgers } = await supabase.from('ledgers').select('*').eq('owner_id', data.user.id).order('created_at')
       let ledger = null
       if (ledgers && ledgers.length > 0) {
