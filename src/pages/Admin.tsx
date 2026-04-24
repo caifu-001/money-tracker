@@ -513,14 +513,16 @@ export function Admin() {
         supabase.from('users').select('*').order('created_at', { ascending: false }),
         supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
       ])
-      console.log('[Admin] settingData:', settingData, 'error:', settingError)
+      console.log('[Admin] loadUsers - settingData:', settingData, 'settingError:', settingError?.message || 'none')
       setUsers((usersData || []) as any[])
       // 如果查询失败或数据不存在，默认关闭
       if (settingError) {
-        console.log('[Admin] using default autoApprove=false')
+        console.log('[Admin] loadUsers - using default autoApprove=false, error:', settingError.message)
         setAutoApprove(false)
       } else {
-        setAutoApprove(settingData?.value === 'true')
+        const newVal = settingData?.value === 'true'
+        console.log('[Admin] loadUsers - setting autoApprove to:', newVal, 'raw value:', settingData?.value)
+        setAutoApprove(newVal)
       }
     } catch (e) {
       console.error('[Admin] loadUsers error:', e)
@@ -565,6 +567,8 @@ export function Admin() {
     }
     setAutoApprove(newVal)
     console.log('[toggleAutoApprove] success, new state:', newVal)
+    // 重新加载用户列表以确保状态同步
+    await loadUsers()
   }
 
   // 授权为管理员（仅超级管理员可操作）
