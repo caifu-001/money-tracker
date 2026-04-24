@@ -228,9 +228,12 @@ Page({
       return
     }
     
-    // 先尝试直接更新
-    const updateResult = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
-    console.log('[toggleAutoApprove] update result:', JSON.stringify(updateResult))
+    // 先尝试 upsert（绕过 UPDATE RLS 限制）
+    const updateResult = await supabase.from('app_settings').upsert(
+      { key: 'auto_approve', value: String(newVal) },
+      { onConflict: 'key' }
+    )
+    console.log('[toggleAutoApprove] upsert result:', JSON.stringify(updateResult))
     
     // 立即查询确认
     let { data: checkData } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
