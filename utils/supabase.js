@@ -68,6 +68,7 @@ class QueryBuilder {
   order(col, opts) { this._orders.push(encodeURIComponent(col) + '.' + (opts && opts.ascending === false ? 'desc' : 'asc')); return this }
   limit(n) { this._params.push('limit=' + n); return this }
   single() { this._headers['Accept'] = 'application/vnd.pgrst.object+json'; return this }
+  maybeSingle() { this._headers['Accept'] = 'application/vnd.pgrst.object+json'; this._headers['Prefer'] = 'missing=default'; return this }
 
   insert(rows) { this._method = 'POST'; this._body = Array.isArray(rows) ? rows : [rows]; return this }
   update(data) { this._method = 'PATCH'; this._body = data; return this }

@@ -164,10 +164,10 @@ Page({
 
   async loadAutoApprove() {
     try {
-      const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+      // 使用 maybeSingle 避免 406 错误（行不存在时返回 null 而非报错）
+      const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').maybeSingle()
       if (error) {
         console.log('[loadAutoApprove] error:', error.message)
-        // 如果查询失败（可能是RLS或行不存在），默认关闭
         this.setData({ autoApprove: false })
         return
       }
