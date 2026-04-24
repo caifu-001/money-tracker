@@ -901,7 +901,10 @@ export function Admin() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontWeight: 700, fontSize: 14, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name || '未设置昵称'}</p>
                     <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{u.email}</p>
-                    <p style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>注册: {u.created_at ? new Date(u.created_at).toLocaleDateString('zh-CN') : '-'}</p>
+                    <p style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>
+                      注册: {u.created_at ? new Date(u.created_at).toLocaleDateString('zh-CN') : '-'}
+                      {u.last_login && <span style={{ marginLeft: 8 }}>最后登录: {new Date(u.last_login).toLocaleDateString('zh-CN')}</span>}
+                    </p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
