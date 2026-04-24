@@ -220,7 +220,14 @@ Page({
   async toggleAutoApprove() {
     const { autoApprove, user } = this.data
     const newVal = !autoApprove
-    console.log('[toggleAutoApprove] current:', autoApprove, 'new:', newVal, 'user:', user?.id)
+    console.log('[toggleAutoApprove] current:', autoApprove, 'new:', newVal, 'user:', user?.id, 'role:', user?.role)
+    
+    // 检查权限
+    if (!user || (user.role !== 'admin' && user.role !== 'manager')) {
+      wx.showToast({ title: '权限不足，需要管理员身份', icon: 'none' })
+      return
+    }
+    
     // 先尝试更新，不存在则插入（绕过 RLS 的 upsert 限制）
     const { error: updateError } = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
     console.log('[toggleAutoApprove] update error:', updateError?.message || 'none')
@@ -234,8 +241,15 @@ Page({
       }
     }
     // 立即查询确认
-    const { data: checkData } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
-    console.log('[toggleAutoApprove] DB value after update:', checkData?.value)
+    const { data: checkData, error: checkError } = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
+    console.log('[toggleAutoApprove] DB value after update:', checkData?.value, 'checkError:', checkError?.message || 'none')
+    
+    if (checkData?.value !== String(newVal)) {
+      console.error('[toggleAutoApprove] 数据库更新未生效！可能是 RLS 策略限制')
+      wx.showToast({ title: '更新未生效，请检查权限', icon: 'none' })
+      return
+    }
+    
     this.setData({ autoApprove: checkData?.value === 'true' })
     wx.showToast({ title: checkData?.value === 'true' ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
   },
