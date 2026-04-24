@@ -68,7 +68,13 @@ export const authService = {
       }
       
       // 更新最后登录时间
-      await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', data.user.id)
+      console.log('[signIn] Updating last_login for user:', data.user.id)
+      const { error: updateError } = await supabase.from('users').update({ last_login: new Date().toISOString() }).eq('id', data.user.id)
+      if (updateError) {
+        console.error('[signIn] Failed to update last_login:', updateError)
+      } else {
+        console.log('[signIn] last_login updated successfully')
+      }
     }
 
     return { data, error }
