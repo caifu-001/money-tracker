@@ -534,6 +534,7 @@ export function Admin() {
       const { data: usersData, error: usersError } = await supabase.from('users').select('*').order('created_at', { ascending: false })
       if (usersError) console.error('[Admin] loadUsers - users error:', usersError.message)
       console.log('[Admin] loadUsers - users count:', usersData?.length || 0)
+      console.log('[Admin] loadUsers - first user last_login:', usersData?.[0]?.last_login)
       setUsers((usersData || []) as any[])
       // 单独加载 autoApprove 设置
       await loadAutoApprove()
