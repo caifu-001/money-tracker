@@ -550,9 +550,21 @@ export function Admin() {
 
   const toggleAutoApprove = async () => {
     const newVal = !autoApprove
-    const { error } = await supabase.from('app_settings').upsert([{ key: 'auto_approve', value: String(newVal) }])
-    if (error) { alert('设置失败：' + error.message); return }
+    console.log('[toggleAutoApprove] current:', autoApprove, 'new:', newVal)
+    // 先尝试更新，不存在则插入（绕过 RLS 的 upsert 限制）
+    const { error: updateError } = await supabase.from('app_settings').update({ value: String(newVal) }).eq('key', 'auto_approve')
+    console.log('[toggleAutoApprove] update error:', updateError?.message || 'none')
+    if (updateError) {
+      // 更新失败（可能行不存在），尝试插入
+      const { error: insertError } = await supabase.from('app_settings').insert([{ key: 'auto_approve', value: String(newVal) }])
+      console.log('[toggleAutoApprove] insert error:', insertError?.message || 'none')
+      if (insertError) {
+        alert('设置失败：' + insertError.message)
+        return
+      }
+    }
     setAutoApprove(newVal)
+    console.log('[toggleAutoApprove] success, new state:', newVal)
   }
 
   // 授权为管理员（仅超级管理员可操作）
