@@ -73,7 +73,9 @@ Page({
   async _updateLastLogin(userId) {
     try {
       const token = wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY
-      await new Promise((resolve) => {
+      console.log('[_updateLastLogin] Updating for user:', userId)
+      console.log('[_updateLastLogin] Token:', token.substring(0, 20) + '...')
+      const res = await new Promise((resolve) => {
         wx.request({
           url: SUPABASE_URL + '/rest/v1/users?id=eq.' + userId,
           method: 'PATCH',
@@ -88,7 +90,10 @@ Page({
           fail: () => resolve(null)
         })
       })
-    } catch(e) {}
+      console.log('[_updateLastLogin] Response:', res.statusCode, res.data)
+    } catch(e) {
+      console.error('[_updateLastLogin] Error:', e)
+    }
   },
 
   // 微信静默登录
