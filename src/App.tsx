@@ -63,24 +63,49 @@ async function fetchUserAndLedger(
     })
   }
 
-  // 查询该用户的账本（强制按 owner_id 过滤）
+  // 查询该用户的账本（包括自己拥有的和通过 ledger_members 共享的）
   const savedLedgerId = localStorage.getItem('qianji_default_ledger_id')
-  const savedLedgerOwner = localStorage.getItem('qianji_default_ledger_owner')
 
-  const { data } = await supabase
+  // 1. 查询自己拥有的账本
+  const { data: ownLedgers } = await supabase
     .from('ledgers')
     .select('*')
     .eq('owner_id', currentUser.id)
     .order('created_at', { ascending: false })
 
-  if (data && data.length > 0) {
-    // 优先恢复用户之前设为默认的账本（仅当该账本仍属于用户时才恢复）
-    if (savedLedgerId && savedLedgerOwner === currentUser.id) {
-      const saved = data.find((l: any) => l.id === savedLedgerId)
+  // 2. 查询通过 ledger_members 共享的账本
+  const { data: memberData } = await supabase
+    .from('ledger_members')
+    .select('ledger_id')
+    .eq('user_id', currentUser.id)
+
+  let sharedLedgers: any[] = []
+  if (memberData && memberData.length > 0) {
+    const ledgerIds = memberData.map((m: any) => m.ledger_id)
+    const { data: sharedData } = await supabase
+      .from('ledgers')
+      .select('*')
+      .in('id', ledgerIds)
+      .order('created_at', { ascending: false })
+    sharedLedgers = sharedData || []
+  }
+
+  // 合并去重（优先使用 ownLedgers）
+  const allLedgers = [...(ownLedgers || [])]
+  for (const shared of sharedLedgers) {
+    if (!allLedgers.find((l: any) => l.id === shared.id)) {
+      allLedgers.push(shared)
+    }
+  }
+
+  if (allLedgers.length > 0) {
+    // 优先恢复用户之前设为默认的账本
+    if (savedLedgerId) {
+      const saved = allLedgers.find((l: any) => l.id === savedLedgerId)
       if (saved) { setCurrentLedger(saved); return }
     }
     // 否则用列表第一个
-    setCurrentLedger(data[0])
+    setCurrentLedger(allLedgers[0])
   } else {
     // 该用户没有任何账本，清空当前账本
     setCurrentLedger(null)
