@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
 import {
@@ -38,6 +38,8 @@ export function Analytics() {
   const [totalExpense, setTotalExpense] = useState(0)
   const [totalIncome, setTotalIncome] = useState(0)
   const [rawData, setRawData] = useState<any[]>([])
+  const [statMode, setStatMode] = useState<'detail' | 'summary'>('detail')
+  const [userCategories, setUserCategories] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
 
@@ -89,12 +91,74 @@ export function Analytics() {
 
   useEffect(() => { loadData() }, [currentLedger, startDate, endDate, catFilter, user])
 
+  // 获取账本类目树（用于大类汇总模式）
+  useEffect(() => {
+    if (!currentLedger?.id) return
+    supabase.from('categories').select('*').eq('ledger_id', currentLedger.id).then(({ data }) => {
+      if (data) setUserCategories(data)
+    })
+  }, [currentLedger])
+
   // 搜索匹配的类别（饼图用）
   const filteredExp = searchCat ? expenseData.filter(d => d.name.includes(searchCat)) : expenseData
   const filteredInc = searchCat ? incomeData.filter(d => d.name.includes(searchCat)) : incomeData
 
   // 所有类别名（用于筛选）
   const allCats = [...new Set([...expenseData, ...incomeData].map(d => d.name))]
+
+  // 大类/小类切换：构建类别名→一级类别映射
+  const catToTopMap = useMemo(() => {
+    const catById: Record<string, any> = {}
+    userCategories.forEach((c: any) => { catById[c.id] = c })
+    const getTop = (cat: any): any => {
+      if (!cat.parent_id) return cat
+      const parent = catById[cat.parent_id]
+      return parent ? getTop(parent) : cat
+    }
+    const map: Record<string, { topName: string; topIcon: string }> = {}
+    userCategories.forEach((c: any) => {
+      const top = getTop(c)
+      map[c.name] = { topName: top.name, topIcon: top.icon || '' }
+    })
+    return map
+  }, [userCategories])
+
+  // 支出饼图数据（大类模式聚合到一级类别）
+  const expenseChartData = useMemo(() => {
+    if (statMode === 'detail' || Object.keys(catToTopMap).length === 0) return filteredExp
+    const agg: Record<string, number> = {}
+    rawData.filter((t: any) => t.type === 'expense').forEach((t: any) => {
+      const key = t.category || '其他'
+      const mapped = catToTopMap[key]
+      const topKey = mapped ? mapped.topName : key
+      agg[topKey] = (agg[topKey] || 0) + t.amount
+    })
+    return Object.entries(agg)
+      .map(([name, value]) => ({ name, value: Number(value) }))
+      .sort((a, b) => b.value - a.value)
+      .filter(d => !searchCat || d.name.includes(searchCat))
+  }, [statMode, rawData, filteredExp, searchCat, catToTopMap])
+
+  // 大类模式：每个一级类别下的子类明细
+  const expenseSubDetails = useMemo(() => {
+    if (statMode === 'detail' || Object.keys(catToTopMap).length === 0) return {} as Record<string, any[]>
+    const subs: Record<string, Record<string, number>> = {}
+    rawData.filter((t: any) => t.type === 'expense').forEach((t: any) => {
+      const key = t.category || '其他'
+      const mapped = catToTopMap[key]
+      const topKey = mapped ? mapped.topName : key
+      if (!subs[topKey]) subs[topKey] = {}
+      subs[topKey][key] = (subs[topKey][key] || 0) + t.amount
+    })
+    const result: Record<string, any[]> = {}
+    Object.entries(subs).forEach(([topCat, subCats]) => {
+      const total = Object.values(subCats).reduce((a, b) => a + b, 0)
+      result[topCat] = Object.entries(subCats)
+        .map(([name, value]) => ({ name, value: Number(value), percent: total > 0 ? (value / total * 100).toFixed(1) : '0' }))
+        .sort((a, b) => b.value - a.value)
+    })
+    return result
+  }, [statMode, rawData, catToTopMap])
 
   const Card = ({ children, style }: any) => (
     <div style={{ background: 'white', borderRadius: 20, padding: 20, boxShadow: '0 2px 16px rgba(0,0,0,0.06)', marginBottom: 16, ...style }}>
@@ -237,33 +301,61 @@ export function Analytics() {
             <Card>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <p style={{ fontWeight: 700, fontSize: 16, color: '#1f2937' }}>💸 支出分类占比</p>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => setStatMode('detail')}
+                    style={{ padding: '4px 12px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      background: statMode === 'detail' ? '#6366f1' : '#f3f4f6', color: statMode === 'detail' ? 'white' : '#6b7280' }}>
+                    小类
+                  </button>
+                  <button onClick={() => setStatMode('summary')}
+                    style={{ padding: '4px 12px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      background: statMode === 'summary' ? '#6366f1' : '#f3f4f6', color: statMode === 'summary' ? 'white' : '#6b7280' }}>
+                    大类
+                  </button>
+                </div>
               </div>
-              {filteredExp.length === 0 ? (
+              {expenseChartData.length === 0 ? (
                 <p style={{ textAlign: 'center', color: '#d1d5db', padding: '40px 0', fontSize: 14 }}>暂无支出数据</p>
               ) : (
                 <>
                   <ResponsiveContainer width="100%" height={240}>
                     <PieChart>
-                      <Pie data={filteredExp} cx="50%" cy="50%" innerRadius={60} outerRadius={100}
+                      <Pie data={expenseChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100}
                         dataKey="value" paddingAngle={2}>
-                        {filteredExp.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
+                        {expenseChartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]}/>)}
                       </Pie>
                       <Tooltip formatter={fmtYuan}/>
                     </PieChart>
                   </ResponsiveContainer>
                   <div style={{ marginTop: 8 }}>
-                    {filteredExp.slice(0, 8).map((d, i) => (
-                      <div key={d.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < filteredExp.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length] }}/>
-                          <span style={{ fontSize: 13, color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                    {expenseChartData.slice(0, 8).map((d, i) => (
+                      <div key={d.name}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: i < expenseChartData.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 10, height: 10, borderRadius: '50%', background: COLORS[i % COLORS.length] }}/>
+                            <span style={{ fontSize: 13, color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: '#1f2937' }}>¥{d.value.toFixed(2)}</span>
+                            <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 6 }}>
+                              ({totalExpense > 0 ? (d.value / totalExpense * 100).toFixed(1) : 0}%)
+                            </span>
+                          </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: '#1f2937' }}>¥{d.value.toFixed(2)}</span>
-                          <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 6 }}>
-                            ({totalExpense > 0 ? (d.value / totalExpense * 100).toFixed(1) : 0}%)
-                          </span>
-                        </div>
+                        {/* 子类目明细 */}
+                        {statMode === 'summary' && expenseSubDetails[d.name] && (
+                          <div style={{ padding: '0 0 4px 28px' }}>
+                            {expenseSubDetails[d.name].map((sub: any) => (
+                              <div key={sub.name} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 12, color: '#6b7280' }}>
+                                <span>└ {sub.name}</span>
+                                <span style={{ display: 'flex', gap: 8 }}>
+                                  <span style={{ color: '#f87171' }}>¥{sub.value.toFixed(2)}</span>
+                                  <span style={{ color: '#9ca3af' }}>{sub.percent}%</span>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
