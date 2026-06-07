@@ -40,6 +40,7 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
   const [categoryId, setCategoryId] = useState('')
   const [note, setNote] = useState(transaction.note || '')
   const [paymentMethod, setPaymentMethod] = useState(transaction.payment_method || 'cash')
+  const [isReimbursable, setIsReimbursable] = useState(!!transaction.is_reimbursable)
   const [date, setDate] = useState(transaction.date)
   const [isLoading, setIsLoading] = useState(false)
   const [catTree, setCatTree] = useState<any[]>([])
@@ -104,6 +105,9 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
         note,
         payment_method: paymentMethod,
         date,
+        ...(type === 'expense' && isReimbursable
+          ? { is_reimbursable: true, reimbursement_status: transaction.reimbursement_status || 'pending' }
+          : { is_reimbursable: false, reimbursement_status: null }),
       }
       console.log('Updating transaction:', transaction.id, updatePayload)
 
@@ -278,6 +282,17 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
                 placeholder="✏️ 添加备注（可选，50字内）" maxLength={50}
                 style={{ width: '100%', padding: '14px 16px', borderRadius: 14, border: '1.5px solid transparent', background: '#f9f9f9', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}/>
             </div>
+
+            {/* 报销 */}
+            {type === 'expense' && (
+              <div onClick={() => setIsReimbursable(!isReimbursable)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: '#fffbeb', border: '1.5px solid #fde68a', cursor: 'pointer' }}>
+                <div style={{ width: 24, height: 24, borderRadius: 6, border: `2px solid ${isReimbursable ? '#d97706' : '#d1d5db'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isReimbursable ? '#d97706' : 'white', flexShrink: 0 }}>
+                  {isReimbursable && <span style={{ color: 'white', fontSize: 14, fontWeight: 700 }}>✓</span>}
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 600, color: '#92400e' }}>🧾 可报销（公司公费）</span>
+              </div>
+            )}
 
             {/* 提交 */}
             <button type="submit" disabled={isLoading || !amount || !categoryId}

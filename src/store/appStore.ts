@@ -26,6 +26,8 @@ interface Transaction {
   date: string
   payment_method?: string
   created_at?: string
+  is_reimbursable?: boolean
+  reimbursement_status?: string | null
 }
 
 interface AppStore {

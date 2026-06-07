@@ -12,6 +12,8 @@ export function Home() {
   const [ledgerUsers, setLedgerUsers] = useState<any[]>([])
   const [showUserFilter, setShowUserFilter] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<any>(null)
+  const [showReimbursableOnly, setShowReimbursableOnly] = useState(false)
+  const [reimburseLoading, setReimburseLoading] = useState(false)
 
   useEffect(() => {
     if (!currentLedger) return
@@ -52,6 +54,21 @@ export function Home() {
     if (!confirm('确定删除这条账目吗？')) return
     await supabase.from('transactions').delete().eq('id', id)
     setTransactions(transactions.filter(t => t.id !== id))
+  }
+
+  const handleReimburseStatus = async (transaction: any) => {
+    const nextStatus = transaction.reimbursement_status === 'pending' ? 'paid' : 'pending'
+    const label = nextStatus === 'paid' ? '已到账' : '待报销'
+    if (!confirm(`将这笔报销标记为「${label}」吗？`)) return
+    setReimburseLoading(true)
+    try {
+      await supabase.from('transactions').update({ reimbursement_status: nextStatus }).eq('id', transaction.id)
+      setTransactions(transactions.map(t => t.id === transaction.id ? { ...t, reimbursement_status: nextStatus } : t))
+    } catch (e: any) {
+      alert('操作失败: ' + (e.message || '未知错误'))
+    } finally {
+      setReimburseLoading(false)
+    }
   }
 
   const handleExport = async () => {
@@ -108,6 +125,12 @@ export function Home() {
   const totalIncome  = transactions.reduce((s, t) => t.type === 'income' ? s + t.amount : s, 0)
   const totalExpense = transactions.reduce((s, t) => t.type === 'expense' ? s + t.amount : s, 0)
   const balance = totalIncome - totalExpense
+  const pendingReimburseTotal = transactions
+    .filter(t => t.is_reimbursable && t.reimbursement_status === 'pending' && t.type === 'expense')
+    .reduce((s, t) => s + t.amount, 0)
+  const displayTransactions = showReimbursableOnly
+    ? transactions.filter(t => t.is_reimbursable && t.reimbursement_status === 'pending')
+    : transactions
   const currentViewUser = selectedUserId ? ledgerUsers.find(u => u.id === selectedUserId) : user
   const todayStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
 
@@ -198,6 +221,14 @@ export function Home() {
                 </div>
               ))}
             </div>
+
+            {/* 待报销提醒 */}
+            {pendingReimburseTotal > 0 && (
+              <div style={{ marginTop: 14, background: 'linear-gradient(135deg, rgba(251,191,36,0.2), rgba(245,158,11,0.15))', borderRadius: 14, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backdropFilter: 'blur(8px)' }}>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 600 }}>🧾 待报销</span>
+                <span style={{ color: '#fbbf24', fontSize: 18, fontWeight: 800 }}>¥{pendingReimburseTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -207,8 +238,16 @@ export function Home() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 20px 16px', borderBottom: '1px solid #f3f4f6' }}>
             <div>
               <p style={{ fontWeight: 700, fontSize: 16, color: '#1f2937' }}>📋 记账记录</p>
-              <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>共 {transactions.length} 笔</p>
+              <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>共 {displayTransactions.length} 笔</p>
             </div>
+            <button onClick={() => setShowReimbursableOnly(!showReimbursableOnly)}
+              style={{
+                padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                background: showReimbursableOnly ? '#fef3c7' : '#f3f4f6',
+                color: showReimbursableOnly ? '#d97706' : '#9ca3af'
+              }}>
+              🧾 待报销
+            </button>
           </div>
 
           {isLoading ? (
@@ -223,7 +262,7 @@ export function Home() {
             </div>
           ) : (
             <div>
-              {transactions.map((transaction, idx) => {
+              {displayTransactions.map((transaction, idx) => {
                 const isExpense = transaction.type === 'expense'
                 const amountColor = isExpense ? '#ef4444' : '#22c55e'
                 const iconBg = isExpense ? '#fef2f2' : '#f0fdf4'
@@ -247,6 +286,15 @@ export function Home() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {transaction.category}
+                        {transaction.is_reimbursable && (
+                          <span style={{
+                            marginLeft: 6, padding: '1px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                            background: transaction.reimbursement_status === 'pending' ? '#fef3c7' : '#dcfce7',
+                            color: transaction.reimbursement_status === 'pending' ? '#92400e' : '#166534'
+                          }}>
+                            {transaction.reimbursement_status === 'pending' ? '🧾待报销' : '✅已到账'}
+                          </span>
+                        )}
                       </p>
                       <p style={{ fontSize: 12, color: '#9ca3af' }}>
                         {format(new Date(transaction.created_at || transaction.date), 'MM/dd HH:mm')}
@@ -269,9 +317,17 @@ export function Home() {
                     </div>
 
                     {/* 操作按钮 */}
-                    {canEdit && (
-                      <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}
-                        onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}
+                      onClick={e => e.stopPropagation()}>
+                      {transaction.is_reimbursable && (
+                        <button onClick={() => handleReimburseStatus(transaction)}
+                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fef9c3', color: '#ca8a04' }}
+                          title={transaction.reimbursement_status === 'pending' ? '标记已到账' : '改回待报销'}>
+                          {transaction.reimbursement_status === 'pending' ? '💰' : '↩️'}
+                        </button>
+                      )}
+                      {canEdit && (
+                        <>
                         <button onClick={() => setEditingTransaction(transaction)}
                           style={{ width: 28, height: 28, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#f5f3ff', color: '#6366f1' }}>
                           <Pencil size={13}/>
@@ -280,8 +336,9 @@ export function Home() {
                           style={{ width: 28, height: 28, borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: '#fef2f2', color: '#ef4444' }}>
                           <Trash2 size={13}/>
                         </button>
-                      </div>
-                    )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )
               })}
