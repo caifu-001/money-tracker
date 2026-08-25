@@ -2,6 +2,12 @@
 page { background: #f0f2f7; }
 .page { min-height: 100vh; padding-bottom: 140rpx; }
 
+/* 游客浏览提示条 */
+.guest-banner { background: #fef3c7; }
+.gb-inner { padding: 16rpx 32rpx; display: flex; align-items: center; justify-content: space-between; }
+.gb-text { font-size: 26rpx; color: #92400e; }
+.gb-login-btn { font-size: 26rpx; color: white; background: #6366f1; padding: 8rpx 24rpx; border-radius: 20rpx; font-weight: 600; }
+
 .header-card { position: relative; overflow: hidden; background: linear-gradient(135deg, #6366f1, #8b5cf6); padding: 60rpx 40rpx 50rpx; }
 .header-circle { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.1); }
 .header-circle1 { top: -80rpx; right: -80rpx; width: 320rpx; height: 320rpx; }
@@ -14,6 +20,11 @@ page { background: #f0f2f7; }
 .create-text { flex: 1; font-size: 28rpx; color: #374151; font-weight: 500; }
 .create-arrow { font-size: 24rpx; color: #9ca3af; transition: transform 0.2s; }
 .create-arrow.rotate { transform: rotate(180deg); }
+
+.join-card { margin: 16rpx 32rpx 0; background: #fff; border-radius: 20rpx; padding: 24rpx 32rpx; display: flex; align-items: center; box-shadow: 0 2rpx 8rpx rgba(236,72,153,0.08); border: 1rpx solid #fce7f3; }
+.join-icon { font-size: 28rpx; margin-right: 16rpx; }
+.join-text { flex: 1; font-size: 26rpx; color: #be185d; font-weight: 500; }
+.join-arrow { font-size: 24rpx; color: #ec4899; }
 
 .create-form { margin: 0 32rpx; background: #fff; border-radius: 0 0 20rpx 20rpx; padding: 24rpx 32rpx 32rpx; box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06); }
 .form-row { margin-bottom: 20rpx; }
@@ -34,8 +45,8 @@ page { background: #f0f2f7; }
 .ledger-item:active { transform: scale(0.98); }
 .ledger-item.current { border: 2rpx solid #6366f1; background: #fafafe; }
 
-/* 默认标签 */
-.default-tag { position: absolute; top: -12rpx; right: 24rpx; background: #f59e0b; color: #fff; font-size: 20rpx; padding: 4rpx 16rpx; border-radius: 20rpx; font-weight: 600; box-shadow: 0 4rpx 12rpx rgba(245,158,11,0.4); z-index: 1; }
+/* 默认标签（行内） */
+.default-tag-inline { font-size: 20rpx; color: #f59e0b; font-weight: 600; }
 
 .ledger-main { display: flex; align-items: center; gap: 20rpx; margin-bottom: 16rpx; }
 .ledger-icon { font-size: 40rpx; flex-shrink: 0; }
@@ -57,8 +68,18 @@ page { background: #f0f2f7; }
 /* 切换按钮 */
 .switch-btn { background: #eef2ff; color: #6366f1; }
 
+/* 编辑按钮 */
+.edit-btn { background: #f0fdf4; color: #16a34a; }
+
 /* 删除按钮 */
 .del-btn { background: #fef2f2; color: #ef4444; }
+
+/* 内联编辑 */
+.edit-inline { margin-bottom: 12rpx; display: flex; align-items: center; gap: 12rpx; }
+.edit-input { flex: 1; height: 72rpx; background: #f9fafb; border-radius: 12rpx; padding: 0 20rpx; font-size: 28rpx; border: 2rpx solid #6366f1; box-sizing: border-box; }
+.edit-btns { display: flex; gap: 12rpx; }
+.edit-save-btn { height: 72rpx; padding: 0 24rpx; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12rpx; color: #fff; display: flex; align-items: center; font-size: 26rpx; font-weight: 600; white-space: nowrap; }
+.edit-cancel-btn { height: 72rpx; padding: 0 24rpx; background: #f3f4f6; border-radius: 12rpx; color: #6b7280; display: flex; align-items: center; font-size: 26rpx; white-space: nowrap; }
 
 /* 空状态 */
 .empty { text-align: center; padding: 120rpx 40rpx; }

@@ -1,6 +1,6 @@
 <view class="page">
 <!-- 游客模式：微信新用户一键注册 -->
-<view class="guest-welcome" wx:if="{{isGuest && showWechatRegister}}">
+<view class="guest-welcome" wx:if="{{isGuest && !guestBrowsing && showWechatRegister}}">
 <view class="guest-icon">💬</view>
 <text class="guest-title">检测到微信账号</text>
 <text class="guest-desc">一键创建账号，无需填写任何信息</text>
@@ -16,12 +16,15 @@
 <button class="guest-login-btn wechat-btn" bindtap="handleWechatRegister" disabled="{{loading}}">
   {{loading?'创建中...':'微信一键注册'}}
 </button>
-<text class="guest-cancel-link" bindtap="goLogin">使用邮箱登录</text>
+<view class="guest-actions">
+  <text class="guest-cancel-link" bindtap="goLogin">使用邮箱登录</text>
+  <text class="guest-skip-link" bindtap="dismissRegister">暂不使用</text>
+</view>
 <text class="guest-tip">登录后即可使用记账功能</text>
 </view>
 
 <!-- 游客模式：未检测到微信或选择邮箱 -->
-<view class="guest-welcome" wx:if="{{isGuest && !showWechatRegister}}">
+<view class="guest-welcome" wx:if="{{isGuest && !guestBrowsing && !showWechatRegister}}">
 <view class="guest-icon">📝</view>
 <text class="guest-title">欢迎使用游游记账</text>
 <text class="guest-desc">一款简洁的家庭记账工具，支持多账本、预算管理、数据分析</text>
@@ -30,23 +33,47 @@
 <view class="feature-item"><text class="feature-icon">💰</text><text>预算管理</text></view>
 <view class="feature-item"><text class="feature-icon">👨‍👩‍👧‍👦</text><text>家庭账本</text></view>
 </view>
+<view class="agree-row">
+  <view class="agree-checkbox {{agreedPrivacy?'checked':''}}" bindtap="toggleAgree">
+    <text wx:if="{{agreedPrivacy}}" class="agree-check-icon">✓</text>
+  </view>
+  <text class="agree-text">我已阅读并同意</text>
+  <text class="agree-link" catchtap="goAgreement">《用户协议》</text>
+  <text class="agree-text">和</text>
+  <text class="agree-link" catchtap="goPrivacy">《隐私政策》</text>
+</view>
+<view class="guest-actions">
+  <button class="guest-login-btn" bindtap="goLogin" disabled="{{!agreedPrivacy}}">登录 / 注册</button>
+  <text class="guest-skip-link {{!agreedPrivacy?'guest-skip-disabled':''}}" bindtap="dismissRegister">先体验</text>
+</view>
 <text class="guest-tip">登录后即可使用记账功能</text>
 </view>
 
-<!-- 已登录用户 -->
-<block wx:if="{{!isGuest}}">
-<view class="no-ledger" wx:if="{{showCreateLedger}}">
+<!-- 游客浏览模式 + 已登录用户 共用主体界面 -->
+<block wx:if="{{guestBrowsing || !isGuest}}">
+<view class="guest-browsing-banner" wx:if="{{isGuest && guestBrowsing}}">
+<text class="gb-text">正在浏览模式 · 登录后可开始记账</text>
+<text class="gb-login-btn" bindtap="goLogin">登录 / 注册</text>
+</view>
+
+<!-- 已登录无账本：创建账本 -->
+<view class="no-ledger" wx:if="{{!isGuest && showCreateLedger}}">
 <text class="title">还没有账本</text>
 <text class="sub">创建一个账本开始记账吧</text>
 <input class="ledger-input" placeholder="输入账本名称" value="{{newLedgerName}}" bindinput="onLedgerNameInput"/>
 <button class="btn-primary" bindtap="createLedger" disabled="{{creatingLedger}}">{{creatingLedger?"创建中...":"创建账本"}}</button>
 </view>
 
-<block wx:if="{{!showCreateLedger}}">
+<!-- 主体记账界面（已登录有账本 或 游客浏览） -->
+<block wx:elif="{{!showCreateLedger || (isGuest && guestBrowsing)}}">
 <view class="header">
 <view class="header-left">
-<text class="ledger-name">{{currentLedger.name}}</text>
-<text class="month">{{monthLabel}}</text>
+<text class="ledger-name" bindtap="{{isGuest?'goLogin':'goLedgers'}}">{{isGuest?'游游记账':(currentLedger.displayName || currentLedger.name)}} <text class="ledger-switch-hint">▾</text></text>
+<view class="month-row">
+<text class="month-arrow" bindtap="prevMonth">‹</text>
+<text class="month" bindtap="openMonthPicker">{{monthLabel}}</text>
+<text class="month-arrow" bindtap="nextMonth">›</text>
+</view>
 </view>
 <view class="header-right">
 <text class="export-btn" bindtap="handleExport">📤 导出</text>
@@ -54,39 +81,96 @@
 </view>
 
 <view class="balance-card">
-<text class="balance-label">本月结余</text>
-<text class="balance-amount">{{balance}}</text>
+<text class="balance-label">{{currentMonth}}月结余</text>
+<text class="balance-amount">{{isGuest?'0.00':balance}}</text>
 <view class="stat-row">
-<view class="stat"><text class="stat-label">收入</text><text class="stat-value income">{{totalIncome}}</text></view>
-<view class="stat"><text class="stat-label">支出</text><text class="stat-value expense">{{totalExpense}}</text></view>
+<view class="stat"><text class="stat-label">收入</text><text class="stat-value income">{{isGuest?'0.00':totalIncome}}</text></view>
+<view class="stat"><text class="stat-label">支出</text><text class="stat-value expense">{{isGuest?'0.00':totalExpense}}</text></view>
+</view>
+<!-- 游客不显示待报销 -->
+<view class="reimburse-summary" wx:if="{{!isGuest && pendingReimburseTotal!=='0.00'}}">
+<text class="reimburse-label">🧾 待报销</text>
+<view class="reimburse-right">
+<text class="reimburse-value">¥{{pendingReimburseTotal}}</text>
+<text class="settle-btn" bindtap="settleAllReimburse">核销</text>
+</view>
 </view>
 </view>
 
 <view class="list-card">
 <view class="list-header">
-<text class="list-title">本月账目</text>
+<text class="list-title">{{currentMonth}}月账目</text>
+<view class="list-header-right" wx:if="{{!isGuest}}">
+<text class="reimburse-filter {{showReimbursableOnly?'active':''}}" bindtap="toggleReimbursableFilter">🧾 待报销</text>
 <text class="list-count">共{{transactions.length}}条</text>
 </view>
-<view wx:if="{{loading}}"><text class="loading">加载中...</text></view>
+</view>
+<!-- 游客：显示引导文字 -->
+<view wx:if="{{isGuest && guestBrowsing}}">
+<view class="empty-state guest-empty">
+<text class="guest-empty-title">👋 欢迎体验游游记账</text>
+<text class="guest-empty-desc">点击右下角 <text class="guest-btn-highlight">+</text> 按钮可以体验记账流程</text>
+<text class="guest-empty-hint">登录后即可保存记录、创建多账本、管理家庭记账</text>
+</view>
+</view>
+<!-- 已登录：按日分组 -->
+<view wx:elif="{{loading}}"><text class="loading">加载中...</text></view>
 <view wx:elif="{{transactions.length===0}}"><text class="empty-state">暂无账目，点击右下角按钮开始记账</text></view>
-<view wx:else>
-<view class="tx-item" wx:for="{{transactions}}" wx:key="id">
-<view class="tx-icon {{item.type}}">{{item.categoryIcon}}</view>
-<view class="tx-info">
-<text class="tx-cat">{{item.category}}</text>
-<text class="tx-date">{{item.dateLabel}}{{item.paymentDisplay?" · "+item.paymentDisplay:""}}{{item.note?" · "+item.note:""}}</text>
-</view>
-<view class="tx-right">
-<text class="tx-amount {{item.type}}">{{item.type==='income'?"+":"-"}}{{item.amountStr}}</text>
-<view class="tx-actions" wx:if="{{item.canEdit}}">
-<text catchtap="onEditTap" data-index="{{index}}">编辑</text>
-</view>
-</view>
-</view>
-</view>
+<block wx:else>
+<block wx:for="{{dailyGroups}}" wx:key="date" wx:for-item="group">
+  <!-- 日期头 + 当日小计 -->
+  <view class="day-header">
+    <text class="day-date">{{group.dateLabel}}</text>
+    <view class="day-stats">
+      <text class="day-inc" wx:if="{{group.income !== '0.00'}}">收 ¥{{group.income}}</text>
+      <text class="day-divider" wx:if="{{group.income !== '0.00' && group.expense !== '0.00'}}">|</text>
+      <text class="day-exp" wx:if="{{group.expense !== '0.00'}}">支 ¥{{group.expense}}</text>
+    </view>
+  </view>
+  <!-- 当日交易列表 -->
+  <view class="tx-item" wx:for="{{group.items}}" wx:key="id" wx:for-item="item" wx:if="{{!showReimbursableOnly || (item.is_reimbursable && item.reimbursement_status==='pending')}}">
+    <view class="tx-icon {{item.type}}">{{item.categoryIcon}}</view>
+    <view class="tx-info">
+      <text class="tx-cat">{{item.category}}<text class="tx-reimburse-badge" wx:if="{{item.is_reimbursable}}">{{item.reimbursement_status==='pending'?'🧾待报销':'✅已到账'}}</text></text>
+      <text class="tx-date">{{item.dateLabel}}{{item.paymentDisplay?" · "+item.paymentDisplay:""}}{{item.note?" · "+item.note:""}}<text class="tx-recorder" wx:if="{{showRecorder && item.recorderName}}"> · {{item.recorderName}}</text></text>
+    </view>
+    <view class="tx-right">
+      <text class="tx-amount {{item.type}}">{{item.type==='income'?"+":"-"}}{{item.amountStr}}</text>
+      <view class="tx-actions" wx:if="{{item.canEdit}}">
+        <text catchtap="onEditTap" data-date="{{group.date}}" data-index="{{index}}">编辑</text>
+        <text catchtap="onDeleteTap" data-date="{{group.date}}" data-index="{{index}}" class="tx-delete">删除</text>
+        <text catchtap="onReimburseStatusTap" data-date="{{group.date}}" data-index="{{index}}" class="tx-reimburse-status" wx:if="{{item.is_reimbursable}}">{{item.reimbursement_status==='pending'?'✓到账':'↩待报'}}</text>
+      </view>
+    </view>
+  </view>
+</block>
+</block>
 </view>
 
 <view class="float-btn" bindtap="openQuickAdd"><text>+</text></view>
+
+<!-- 月份选择弹窗 -->
+<view class="modal-mask" wx:if="{{monthPickerVisible}}" bindtap="closeMonthPicker"></view>
+<view class="month-picker-panel" wx:if="{{monthPickerVisible}}">
+<view class="mp-header">
+<text bindtap="closeMonthPicker">取消</text>
+<text class="mp-title">选择月份</text>
+<text class="mp-confirm" bindtap="closeMonthPicker">确定</text>
+</view>
+<picker-view
+  class="mp-picker-view"
+  value="{{monthPickerValue}}"
+  bindchange="onMonthPickerChange"
+  indicator-style="height: 50px;"
+>
+  <picker-view-column>
+    <view wx:for="{{monthPickerRange[0]}}" wx:key="*this" class="mp-item">{{item}}</view>
+  </picker-view-column>
+  <picker-view-column>
+    <view wx:for="{{monthPickerRange[1]}}" wx:key="*this" class="mp-item">{{item}}</view>
+  </picker-view-column>
+</picker-view>
+</view>
 </block>
 </block>
 </view>
@@ -141,6 +225,12 @@
 <text class="pay-name">{{item.name}}</text>
 </view>
 </view>
+<view class="reimburse-toggle" wx:if="{{qaType==='expense'}}" bindtap="onQaReimburseTap">
+<view class="reimburse-checkbox {{qaReimbursable?'checked':''}}">
+<text wx:if="{{qaReimbursable}}">✓</text>
+</view>
+<text class="reimburse-toggle-label">🧾 可报销（公司公费）</text>
+</view>
 <view class="submit-btn {{qaType==='expense'?'expense-btn':'income-btn'}}" bindtap="handleQuickAdd">{{qaLoading?"提交中...":"确认记账"}}</view>
 </view>
 
@@ -194,8 +284,38 @@
 <text class="pay-name">{{item.name}}</text>
 </view>
 </view>
+<view class="reimburse-toggle" wx:if="{{editType==='expense'}}" bindtap="onEditReimburseTap">
+<view class="reimburse-checkbox {{editReimbursable?'checked':''}}">
+<text wx:if="{{editReimbursable}}">✓</text>
+</view>
+<text class="reimburse-toggle-label">🧾 可报销（公司公费）</text>
+</view>
 <view class="edit-btns">
 <view class="submit-btn {{editType==='expense'?'expense-btn':'income-btn'}}" bindtap="handleEdit">{{editLoading?"保存中...":"保存修改"}}</view>
 <view class="delete-btn" bindtap="handleDelete">删除</view>
+</view>
+</view>
+
+<!-- 隐私授权弹窗（独立于登录状态，所有用户首次使用都弹出） -->
+<view class="privacy-mask" wx:if="{{showPrivacyConsent}}">
+<view class="privacy-modal">
+<view class="privacy-modal-title">用户协议和隐私政策</view>
+<view class="privacy-modal-body">
+<text class="privacy-modal-text">感谢您使用游游记账。我们重视您的隐私，请在使用服务前阅读并同意以下协议：</text>
+<view class="privacy-modal-links">
+<text class="privacy-modal-link" bindtap="goAgreement">《用户协议》</text>
+<text class="privacy-modal-link" bindtap="goPrivacy">《隐私政策》</text>
+</view>
+<view class="privacy-modal-agree" bindtap="toggleAgree">
+<view class="agree-checkbox {{agreedPrivacy?'checked':''}}">
+<text wx:if="{{agreedPrivacy}}" class="agree-check-icon">✓</text>
+</view>
+<text class="agree-text">我已阅读并同意以上协议</text>
+</view>
+<view class="privacy-modal-btns">
+<button class="privacy-modal-btn cancel" bindtap="rejectPrivacy">不同意</button>
+<button class="privacy-modal-btn confirm {{!agreedPrivacy?'btn-disabled':''}}" bindtap="acceptPrivacy" disabled="{{!agreedPrivacy}}">同意并继续</button>
+</view>
+</view>
 </view>
 </view>

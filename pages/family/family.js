@@ -17,11 +17,15 @@ Page({
     joinResult: null,  // { ok: bool, msg: string }
   },
 
-  onLoad() {
+  onLoad(options) {
     const user = app.globalData.user
     if (!user) return wx.reLaunch({ url: '/pages/login/login' })
     this.setData({ user, currentLedger: app.globalData.currentLedger })
     this.loadData()
+    // 如果从账本管理页通过"加入他人账本"进入，直接打开加入表单
+    if (options && options.mode === 'join') {
+      this.setData({ showJoin: true })
+    }
   },
 
   onShow() {

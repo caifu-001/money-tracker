@@ -1,4 +1,12 @@
 <view class="page">
+  <!-- 游客浏览提示条 -->
+  <view class="guest-banner" wx:if="{{isGuest}}">
+    <view class="gb-inner">
+      <text class="gb-text">正在浏览，登录后即可查看完整分析</text>
+      <text class="gb-login-btn" bindtap="goLogin">登录</text>
+    </view>
+  </view>
+
   <view class="header-card">
     <view class="header-circle header-circle1"></view>
     <view class="header-circle header-circle2"></view>
@@ -38,11 +46,65 @@
   <view class="loading" wx:if="{{loading}}"><text class="loading-text">加载中...</text></view>
   <view wx:if="{{!loading}}">
 
+    <!-- 搜索卡片 - 全局适用 -->
+    <view class="search-card">
+      <input class="search-input" type="text" placeholder="搜索类别..." value="{{searchCat}}" bindinput="onSearchInput" bindconfirm="onSearchConfirm" confirm-type="search"/>
+      <view class="search-clear" wx:if="{{searchCat}}" bindtap="clearSearch"><text>✕</text></view>
+    </view>
+
+    <!-- 搜索结果 - 紧贴搜索框下方 -->
+    <view wx:if="{{searchCat && viewType==='expense'}}">
+      <view class="breakdown-section" wx:if="{{filteredExpenseList && filteredExpenseList.length > 0}}">
+        <text class="breakdown-title expense">💸 支出搜索结果（{{filteredExpenseList.length}}项）</text>
+        <view class="breakdown-list">
+          <view class="breakdown-item" wx:for="{{filteredExpenseList}}" wx:key="category">
+            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
+            <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
+          </view>
+        </view>
+      </view>
+      <view class="empty-state" wx:if="{{!filteredExpenseList || filteredExpenseList.length === 0}}">
+        <text class="empty-text">未找到匹配「{{searchCat}}」的支出类别</text>
+      </view>
+    </view>
+    <view wx:if="{{searchCat && viewType==='income'}}">
+      <view class="breakdown-section" wx:if="{{filteredIncomeList && filteredIncomeList.length > 0}}">
+        <text class="breakdown-title income">💰 收入搜索结果（{{filteredIncomeList.length}}项）</text>
+        <view class="breakdown-list">
+          <view class="breakdown-item" wx:for="{{filteredIncomeList}}" wx:key="category">
+            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
+            <view class="bi-right"><text class="bi-amount income">+¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
+          </view>
+        </view>
+      </view>
+      <view class="empty-state" wx:if="{{!filteredIncomeList || filteredIncomeList.length === 0}}">
+        <text class="empty-text">未找到匹配「{{searchCat}}」的收入类别</text>
+      </view>
+    </view>
+    <view wx:if="{{searchCat && viewType==='payment'}}">
+      <view class="breakdown-section" wx:if="{{filteredPaymentList && filteredPaymentList.length > 0}}">
+        <text class="breakdown-title">💳 支付搜索结果（{{filteredPaymentList.length}}项）</text>
+        <view class="breakdown-list">
+          <view class="breakdown-item" wx:for="{{filteredPaymentList}}" wx:key="method">
+            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.label}}</text></view>
+            <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
+          </view>
+        </view>
+      </view>
+      <view class="empty-state" wx:if="{{!filteredPaymentList || filteredPaymentList.length === 0}}">
+        <text class="empty-text">未找到匹配「{{searchCat}}」的支付方式</text>
+      </view>
+    </view>
+
+    <!-- 统计模式切换 -->
+    <view class="stat-mode-toggle">
+      <text class="stat-mode-label">统计</text>
+      <view class="mode-btn {{statMode==='detail'?'active':''}}" bindtap="switchStatMode" data-mode="detail"><text>小类</text></view>
+      <view class="mode-btn {{statMode==='summary'?'active':''}}" bindtap="switchStatMode" data-mode="summary"><text>大类</text></view>
+    </view>
+
     <!-- 支出视图 -->
     <view wx:if="{{viewType==='expense'}}">
-      <view class="search-card">
-        <input class="search-input" type="text" placeholder="搜索类别..." value="{{searchCat}}" bindinput="onSearchInput"/>
-      </view>
       <!-- 横向比例圆饼图 -->
       <view class="pie-card" wx:if="{{expenseBreakdown.length > 0}}">
         <text class="chart-title">💸 支出占比</text>
@@ -86,11 +148,21 @@
         </view>
       </view>
       <view class="breakdown-section" wx:if="{{expenseBreakdown.length > 0}}">
-        <text class="breakdown-title expense">💸 支出明细{{filteredExpenseList ? '（搜索结果）' : ''}}</text>
+        <text class="breakdown-title expense">💸 支出明细</text>
         <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{filteredExpenseList || expenseBreakdown}}" wx:key="category">
+          <view class="breakdown-item" wx:for="{{expenseBreakdown}}" wx:key="category">
             <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
             <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
+            <view class="sub-items" wx:if="{{item.subItems && item.subItems.length}}">
+              <view class="sub-item" wx:for="{{item.subItems}}" wx:for-item="sub" wx:key="category">
+                <text class="sub-icon">{{sub.icon}}</text>
+                <text class="sub-name">{{sub.category}}</text>
+                <view class="sub-right">
+                  <text class="sub-amount expense">¥{{sub.amount}}</text>
+                  <text class="sub-pct">{{sub.percent}}%</text>
+                </view>
+              </view>
+            </view>
           </view>
         </view>
       </view>

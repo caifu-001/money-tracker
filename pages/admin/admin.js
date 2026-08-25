@@ -1,6 +1,7 @@
-// pages/admin/admin.js
+﻿// pages/admin/admin.js
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
+const { initDefaultCategories } = require('../../utils/categories')
 
 Page({
   data: {
@@ -17,6 +18,11 @@ Page({
     joining: false,
     joinResult: null,
     myLedgers: [],
+    editingLedgerId: null,
+    editLedgerName: '',
+    showCreate: false,
+    newLedgerName: '',
+    creating: false,
     editName: '',
     savingProfile: false,
     // 用户管理
@@ -24,6 +30,17 @@ Page({
     autoApprove: false,
     // 加入账本
     inputInviteCode: '',
+    // 账户详情
+    profile: {
+      idShown: '',
+      email: '',
+      roleName: '',
+      roleClass: '',
+      statusName: '',
+      createdDate: '',
+      loginDate: '',
+      ledgerCount: 0,
+    },
   },
 
   onLoad() {
@@ -89,6 +106,8 @@ Page({
       await this.loadMyLedgers()
     } else if (tab === 'ledgers') {
       await this.loadLedgers()
+    } else if (tab === 'account') {
+      await this.loadProfile()
     }
     if (tab === 'users' && (user.role === 'admin' || user.role === 'manager')) {
       await this.loadUsers()
@@ -124,6 +143,112 @@ Page({
     await this.loadMyLedgers()
   },
 
+  // ── 账本 Tab 增删改 ──
+  goLedgersPage() {
+    wx.navigateTo({ url: '/pages/ledgers/ledgers' })
+  },
+  toggleCreate() { this.setData({ showCreate: !this.data.showCreate, newLedgerName: '' }) },
+  onNewLedgerNameInput(e) { this.setData({ newLedgerName: e.detail.value }) },
+  async handleCreateLedger() {
+    const { newLedgerName, user, creating } = this.data
+    if (!newLedgerName || !newLedgerName.trim() || creating) return
+    this.setData({ creating: true })
+    try {
+      const { data, error } = await supabase.from('ledgers').insert([{ name: newLedgerName.trim(), owner_id: user.id, type: 'personal' }]).select()
+      if (error) throw new Error(error.message)
+      this.setData({ showCreate: false, newLedgerName: '' })
+      // 初始化预置分类
+      if (data && data[0]) await initDefaultCategories(supabase, data[0].id)
+      await this.loadMyLedgers()
+      wx.showToast({ title: '创建成功', icon: 'success' })
+    } catch(e) {
+      wx.showToast({ title: e.message || '创建失败', icon: 'none' })
+    } finally {
+      this.setData({ creating: false })
+    }
+  },
+  startEditLedger(e) {
+    const ledger = this.data.myLedgers[e.currentTarget.dataset.index]
+    this.setData({ editingLedgerId: ledger.id, editLedgerName: ledger.name })
+  },
+  onEditLedgerNameInput(e) { this.setData({ editLedgerName: e.detail.value }) },
+  cancelEditLedger() { this.setData({ editingLedgerId: null, editLedgerName: '' }) },
+  async saveLedgerName(e) {
+    const id = e.currentTarget.dataset.id
+    const newName = (this.data.editLedgerName || '').trim()
+    if (!newName) { this.cancelEditLedger(); return }
+    const { error } = await supabase.from('ledgers').update({ name: newName }).eq('id', id)
+    if (error) { wx.showToast({ title: error.message || '修改失败', icon: 'none' }); return }
+    this.setData({ editingLedgerId: null, editLedgerName: '' })
+    await this.loadMyLedgers()
+    wx.showToast({ title: '已修改', icon: 'success' })
+  },
+  async handleDeleteLedger(e) {
+    const ledger = this.data.myLedgers[e.currentTarget.dataset.index]
+    wx.showModal({
+      title: '⚠️ 确认删除',
+      content: `确定删除账本「${ledger.name}」？所有数据将被永久删除！`,
+      success: async res => {
+        if (!res.confirm) return
+        wx.showModal({
+          title: '再次确认',
+          content: `输入「${ledger.name}」以确认删除:`,
+          editable: true,
+          placeholderText: ledger.name,
+          success: async r2 => {
+            if (!r2.confirm || r2.content !== ledger.name) {
+              wx.showToast({ title: '已取消', icon: 'none' })
+              return
+            }
+            try {
+              await supabase.from('ledgers').delete().eq('id', ledger.id)
+              if (app.globalData.currentLedger && app.globalData.currentLedger.id === ledger.id) {
+                app.globalData.currentLedger = null
+                wx.removeStorageSync('default_ledger_id')
+              }
+              wx.showToast({ title: '已删除', icon: 'success' })
+              await this.loadMyLedgers()
+            } catch(e) {
+              wx.showToast({ title: '删除失败: ' + (e.message || ''), icon: 'none' })
+            }
+          }
+        })
+      }
+    })
+  },
+
+  async loadProfile() {
+    const { user } = this.data
+    if (!user) return
+    try {
+      // 查询用户详细信息
+      const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single()
+      // 查询账本数量
+      const { data: ledgers } = await supabase.from('ledgers').select('id').eq('owner_id', user.id)
+      const ledgerCount = (ledgers || []).length
+
+      const roleMap = { admin: '管理员', manager: '管理员', user: '普通用户' }
+      const roleClassMap = { admin: 'role-admin', manager: 'role-admin', user: 'role-user' }
+      const statusMap = { active: '正常', pending: '待审核', disabled: '已禁用' }
+
+      this.setData({
+        profile: {
+          idShown: (user.id || '').slice(0, 8) + '...',
+          email: profile?.email || user.email || '',
+          roleName: roleMap[user.role] || user.role || '--',
+          roleClass: roleClassMap[user.role] || 'role-user',
+          status: profile?.status || user.status || 'active',
+          statusName: statusMap[profile?.status || user.status] || '--',
+          createdDate: profile?.created_at ? profile.created_at.slice(0, 10) : '--',
+          loginDate: profile?.last_login ? profile.last_login.slice(0, 16).replace('T', ' ') : '--',
+          ledgerCount: ledgerCount,
+        }
+      })
+    } catch (e) {
+      console.error('[loadProfile]', e)
+    }
+  },
+
   async loadUsers() {
     const { data, error } = await supabase.from('users').select('id,name,email,role,status,created_at,last_login').order('created_at', { ascending: false })
     if (error) { console.error('loadUsers error:', error); wx.showToast({ title: '加载用户失败:' + error.message, icon: 'none', duration: 3000 }); return }
@@ -151,7 +276,7 @@ Page({
       }
       // 预处理日期格式（WXML 不支持 .slice() 方法调用）
       const createdDate = u.created_at ? u.created_at.slice(0, 10) : '--'
-      const loginDate = u.last_login ? u.last_login.slice(0, 10) : '--'
+      const loginDate = u.last_login ? u.last_login.slice(0, 16).replace('T', ' ') : '--'
       return { ...u, activity, activityClass, createdDate, loginDate }
     })
     console.log('[loadUsers] setting users:', withActivity.length)
@@ -325,8 +450,16 @@ Page({
   goAbout() {
     wx.showModal({
       title: '游游记账',
-      content: '版本：v4.0.4\n\n一款简洁的家庭记账工具\n支持多账本、预算管理、数据分析\n\n© 2026 游游记账团队',
+      content: '版本：v5.1.1\n\n一款简洁的家庭记账工具\n支持多账本、预算管理、数据分析\n\n© 2026 游游记账团队',
       showCancel: false
     })
+  },
+
+  goAgreement() {
+    wx.navigateTo({ url: '/pages/agreement/agreement' })
+  },
+
+  goPrivacy() {
+    wx.navigateTo({ url: '/pages/privacy/privacy' })
   },
 })

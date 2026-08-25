@@ -13,15 +13,7 @@ Page({
     this.setData({ reachedBottom: true })
   },
 
-  handleConfirm() {
-    const pages = getCurrentPages()
-    const prevPage = pages[pages.length - 2]
-    if (prevPage) {
-      prevPage.setData({ agreedPrivacy: true })
-    }
-    wx.navigateBack()
-  },
-
+  // 仅返回，不自动勾选复选框 — 用户须回到主页面手动勾选
   goBack() {
     wx.navigateBack()
   }

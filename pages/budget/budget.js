@@ -19,6 +19,8 @@ function flattenCategories(cats, parentIcon) {
 Page({
   data: {
     loading: true,
+    isGuest: true,
+    user: null,
     saving: false,
     budgetList: [],
     catList: [],
@@ -40,21 +42,21 @@ Page({
     const now = new Date()
     const year = now.getFullYear()
     const month = now.getMonth() + 1
+    const user = app.globalData.user
     const ledger = app.globalData.currentLedger
-    this.setData({ year, month, monthLabel: `${year}年${month}月`, currentLedger: ledger || null })
-    this.loadData(year, month)
+    this.setData({ user: user || null, isGuest: !user, year, month, monthLabel: `${year}年${month}月`, currentLedger: ledger || null, loading: !user })
+    if (user) this.loadData(year, month)
   },
 
   onShow() {
+    const user = app.globalData.user
+    this.setData({ user: user || null, isGuest: !user })
     const ledger = app.globalData.currentLedger
     const { year, month } = this.data
-    if (!this.data.currentLedger || !this.data.currentLedger.id) {
-      if (ledger && ledger.id) { this.setData({ currentLedger: ledger }); this.loadData(year, month) }
-      return
+    if (ledger && ledger.id !== this.data.currentLedger?.id) {
+      this.setData({ currentLedger: ledger })
     }
-    if (ledger && ledger.id !== this.data.currentLedger.id) {
-      this.setData({ currentLedger: ledger }); this.loadData(year, month)
-    }
+    if (user) this.loadData(year, month)
   },
 
   prevMonth() {
@@ -191,5 +193,9 @@ Page({
     } finally {
       this.setData({ saving: false })
     }
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: '/pages/login/login' })
   },
 })

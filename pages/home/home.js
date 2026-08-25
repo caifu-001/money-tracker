@@ -1,6 +1,6 @@
-// pages/home/home.js
+﻿// pages/home/home.js
 const app = getApp()
-const { supabase } = require('../../utils/supabase')
+const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } = require('../../utils/supabase')
 const { initDefaultCategories } = require('../../utils/categories')
 
 const PAYMENT_METHODS = [
@@ -10,34 +10,76 @@ const PAYMENT_METHODS = [
   { id: 'bankcard',name: '银行卡',  icon: '💳' },
 ]
 
+// 北京时间工具函数
+const bjNow = () => {
+  const utc = Date.now()
+  return new Date(utc + 8 * 3600000)
+}
+const bjDateStr = (d) => {
+  return d.toISOString().split('T')[0]
+}
+const bjToday = () => bjDateStr(bjNow())
+const bjDaysAgo = (n) => {
+  const d = bjNow()
+  d.setDate(d.getDate() - n)
+  return bjDateStr(d)
+}
+
+const LOGGED_IN = (() => {
+  const userInfo = wx.getStorageSync('user_info')
+  const sessionDate = wx.getStorageSync('session_date')
+  const SESSION_TTL_DAYS = 7
+  if (userInfo && sessionDate) {
+    const sessionMs = new Date(sessionDate + 'T00:00:00').getTime()
+    const elapsed = Date.now() - sessionMs
+    if (elapsed <= SESSION_TTL_DAYS * 86400000) {
+      return { user: userInfo || null, isGuest: false, guestBrowsing: false }
+    }
+  }
+  return { user: null, isGuest: true, guestBrowsing: false }
+})()
+
 Page({
   data: {
-    user: null, 
-    isGuest: true,  // 游客模式标记
+    user: LOGGED_IN.user,
+    isGuest: LOGGED_IN.isGuest,
+    guestBrowsing: LOGGED_IN.guestBrowsing,
     // 微信一键注册
     wechatOpenid: '',
     showWechatRegister: false,
     agreedPrivacy: false,
-    loading: false,
+    showPrivacyConsent: false,  // 隐私授权弹窗
+    loading: !!LOGGED_IN.user,  // 老用户立即显示 loading
+    dailyChecked: wx.getStorageSync('last_ping_date') === bjToday(),  // 签到状态
     currentLedger: null,
-    transactions: [], loading: true,
+    transactions: [],
     totalIncome: '0.00', totalExpense: '0.00', balance: '0.00',
+    currentYear: 0,
+    currentMonth: 0,
     monthLabel: '',
+    monthPickerVisible: false,
+    monthPickerRange: [],
+    monthPickerValue: [0, 0],
     paymentMethods: PAYMENT_METHODS,
     // 记账弹窗
     showQuickAdd: false,
-    qaType: 'expense', qaAmount: '', qaCategory: '', qaNote: '', qaDate: '', qaLoading: false,
+    qaType: 'expense', qaAmount: '', qaCategory: '', qaNote: '', qaDate: '', qaLoading: false, qaReimbursable: false,
     qaExpandedKey: null, subCats: [], qaSubExpandedKey: null, subSubCats: [],
     currentCats: [],
     qaPaymentMethod: 'cash',
     // 编辑弹窗
     showEdit: false, editTx: null,
-    editType: 'expense', editAmount: '', editCategory: '', editNote: '', editDate: '', editLoading: false,
+    editType: 'expense', editAmount: '', editCategory: '', editNote: '', editDate: '', editLoading: false, editReimbursable: false,
     editCats: [],
     editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [],
     editPaymentMethod: 'cash',
     // 类别树
     catTree: [],
+    catFreq: {},  // 分类使用频次 {name: count}
+    // 报销筛选
+    showReimbursableOnly: false,
+    pendingReimburseTotal: '0.00',
+    dailyGroups: [], // 按日分组 [{date, dateLabel, income, expense, items:[]}]
     // 创建账本
     showCreateLedger: false,
     newLedgerName: '',
@@ -45,32 +87,118 @@ Page({
   },
 
   onLoad() {
-    // 游客模式下，首页直接发起微信静默登录
-    const user = app.globalData.user
-    if (!user) {
-      this.tryWechatLogin()
+    // 隐私授权检查（所有用户，跟登录状态无关）
+    if (!wx.getStorageSync('privacy_agreed')) {
+      this.setData({ showPrivacyConsent: true })
     }
+
+    const user = app.globalData.user
     const ledger = app.globalData.currentLedger
     const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth() + 1
+    
+    // 记录当前账本ID，避免 onShow 重复加载
+    this._lastShownLedgerId = ledger ? ledger.id : null
+    
+    // 尝试从缓存恢复数据，立即可见
+    let cached = null
+    if (user && ledger) {
+      try {
+        cached = wx.getStorageSync('home_cache')
+        if (cached && cached.ledgerId === ledger.id && cached.year === y && cached.month === m) {
+          this.setData({
+            user, isGuest: false, guestBrowsing: false,
+            currentLedger: { ...ledger },
+            currentYear: cached.year, currentMonth: cached.month, monthLabel: cached.monthLabel,
+            totalIncome: cached.totalIncome, totalExpense: cached.totalExpense, balance: cached.balance,
+            dailyGroups: cached.dailyGroups, transactions: cached.transactions,
+            catTree: cached.catTree, catFreq: cached.catFreq,
+            showCreateLedger: false, loading: false  // 缓存命中 → 直接展示
+          })
+        }
+      } catch(e) { cached = null }
+    }
     
     this.setData({
       user: user || null,
-      isGuest: !user,  // 无 user 就是游客
-      currentLedger: ledger || { id: null, name: '暂无账本' },
-      monthLabel: `${now.getFullYear()}年${now.getMonth()+1}月`,
-      showCreateLedger: !ledger && user  // 已登录但无账本时显示创建界面
+      isGuest: !user,
+      guestBrowsing: !user,
+      currentLedger: ledger ? { ...ledger } : { id: null, name: '暂无账本' },
+      currentYear: y,
+      currentMonth: m,
+      monthLabel: `${y}年${m}月`,
+      showCreateLedger: !ledger && user,
+      loading: !!user && !cached  // 无缓存才显示 loading
     })
     
     if (user && ledger) {
-      this.loadData()
-      this.loadCatTree()
+      // 后台静默刷新（不阻塞界面）
+      const t0 = Date.now()
+      Promise.all([
+        this.loadCatFreq().then(() => this.loadCatTree()),
+        this.loadData().then(() => {
+          const d = this.data
+          wx.setStorageSync('home_cache', {
+            ledgerId: ledger.id, year: d.currentYear, month: d.currentMonth, monthLabel: d.monthLabel,
+            totalIncome: d.totalIncome, totalExpense: d.totalExpense, balance: d.balance,
+            dailyGroups: d.dailyGroups, transactions: d.transactions,
+            catTree: d.catTree, catFreq: d.catFreq
+          })
+        })
+      ]).then(() => {
+        console.log('[home] 首页加载耗时', Date.now() - t0, 'ms')
+      })
     } else {
       this.setData({ loading: false })
     }
   },
 
+  // 签到：用户主动点击 + 自动静默打卡
+  handleCheckin() {
+    const today = bjToday()
+    if (this.data.dailyChecked) {
+      wx.showToast({ title: '今天已签到', icon: 'none' })
+      return
+    }
+    wx.setStorageSync('last_ping_date', today)
+    this.setData({ dailyChecked: true })
+    wx.request({
+      url: SUPABASE_URL + '/rest/v1/rpc/update_last_login',
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + (wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY)
+      },
+      data: { p_user_id: app.globalData.user?.id },
+      success: () => wx.showToast({ title: '签到成功 ✅', icon: 'success' }),
+      fail: () => wx.showToast({ title: '网络异常，稍后重试', icon: 'none' })
+    })
+  },
+
+  // 静默自动打卡，onShow 调用，不弹 toast
+  _autoCheckin() {
+    const today = bjToday()
+    if (wx.getStorageSync('last_ping_date') === today) return
+    wx.setStorageSync('last_ping_date', today)
+    this.setData({ dailyChecked: true })
+    wx.request({
+      url: SUPABASE_URL + '/rest/v1/rpc/update_last_login',
+      method: 'POST',
+      header: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + (wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY)
+      },
+      data: { p_user_id: app.globalData.user?.id }
+    })
+  },
+
+  // 上次 onShow 时浏览的账本 ID，用于避免同账本重复刷新
+  _lastShownLedgerId: null,
+
   onShow() {
-    // 每次显示时刷新用户状态（可能从登录页返回）
     const user = app.globalData.user
     const ledger = app.globalData.currentLedger
     
@@ -83,6 +211,9 @@ Page({
       this.setData({ loading: false, currentLedger: { id: null, name: '暂无账本' }, showCreateLedger: false })
       return
     }
+
+    // 每日自动打卡（静默，不弹 toast）
+    this._autoCheckin()
     
     if (!ledger) {
       this.setData({ currentLedger: { id: null, name: '暂无账本' }, showCreateLedger: true })
@@ -91,15 +222,37 @@ Page({
     
     const prevId = this.data.currentLedger ? this.data.currentLedger.id : null
     if (ledger.id !== prevId) {
-      this.setData({ currentLedger: ledger, showCreateLedger: false })
+      this.setData({ currentLedger: { ...ledger }, showCreateLedger: false })
+      Promise.all([
+        this.loadCatFreq().then(() => this.loadCatTree()),
+        this.loadData()
+      ])
+    } else if (this._lastShownLedgerId !== ledger.id) {
+      // 同账本但首次进入（从登录页跳来）
+      this._lastShownLedgerId = ledger.id
+      Promise.all([
+        this.loadCatFreq().then(() => this.loadCatTree()),
+        this.loadData()
+      ])
     }
-    this.loadData()
-    this.loadCatTree()
+    // 否则是 tab 切换回来，不需要重复加载
   },
 
   // 游客点击登录（邮箱方式）
   goLogin() {
+    if (!this.data.agreedPrivacy) return wx.showToast({ title: '请先阅读并同意用户协议和隐私政策', icon: 'none' })
     wx.navigateTo({ url: '/pages/login/login' })
+  },
+
+  // 游客选择暂不注册，进入浏览模式
+  dismissRegister() {
+    if (!this.data.agreedPrivacy) return wx.showToast({ title: '请先阅读并同意用户协议和隐私政策', icon: 'none' })
+    this.setData({ guestBrowsing: true, showWechatRegister: false })
+  },
+
+  // 跳转账本管理
+  goLedgers() {
+    wx.navigateTo({ url: '/pages/ledgers/ledgers' })
   },
 
   // 微信静默登录（首页游客模式专用）
@@ -146,6 +299,7 @@ Page({
           }
         }
         const ledger = allLedgers.length > 0 ? allLedgers[0] : null
+        this._updateLastLogin(user.id)
         app.onLoginSuccess(user, ledger)
         this.setData({ user, isGuest: false })
         this.loadData()
@@ -162,6 +316,48 @@ Page({
   // 切换协议同意
   toggleAgree() {
     this.setData({ agreedPrivacy: !this.data.agreedPrivacy })
+  },
+
+  // 隐私授权：同意
+  acceptPrivacy() {
+    if (!this.data.agreedPrivacy) return
+    wx.setStorageSync('privacy_agreed', true)
+    this.setData({ showPrivacyConsent: false })
+  },
+
+  // 隐私授权：拒绝（退出程序）
+  rejectPrivacy() {
+    wx.showModal({
+      title: '提示',
+      content: '您需要同意用户协议和隐私政策才能使用本服务。',
+      showCancel: false,
+      confirmText: '好的',
+      success: () => {
+        wx.reLaunch({ url: '/pages/home/home' })
+      }
+    })
+  },
+
+  // 更新用户最后登录时间
+  async _updateLastLogin(userId) {
+    try {
+      await new Promise((resolve) => {
+        wx.request({
+          url: SUPABASE_URL + '/rest/v1/rpc/update_last_login',
+          method: 'POST',
+          header: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+          },
+          data: { p_user_id: userId },
+          success: () => resolve(),
+          fail: () => resolve()
+        })
+      })
+    } catch(e) {
+      console.error('[_updateLastLogin]', e)
+    }
   },
 
   // 微信一键注册
@@ -183,6 +379,7 @@ Page({
       this.setData({ loading: false, showWechatRegister: false })
       if (autoApprove) {
         const user = { id: authData.user.id, email, name, role: 'user' }
+        this._updateLastLogin(user.id)
         app.onLoginSuccess(user, null)
         this.setData({ user, isGuest: false })
         wx.showToast({ title: '注册成功', icon: 'success' })
@@ -223,13 +420,52 @@ Page({
       return 
     }
     this.setData({ loading: true })
-    const now = new Date()
-    const start = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
-    const end = now.toISOString().split('T')[0]
+    const { currentYear, currentMonth } = this.data
+    const start = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`
+    // 计算当月最后一天
+    const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+    const end = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`
+
+    // 查当前账本是否有其他成员（用于共同标识）
+    const { data: members } = await supabase.from('ledger_members').select('user_id').eq('ledger_id', currentLedger.id)
+    const hasMembers = members && members.length > 0
     let q = supabase.from('transactions').select('*').eq('ledger_id', currentLedger.id).gte('date', start).lte('date', end)
-    if (user.role !== 'admin') q = q.eq('user_id', user.id)
+    // 共享账本中应能看到所有成员交易
     q = q.order('date', { ascending: false }).order('created_at', { ascending: false })
-    const { data } = await q
+    const { data, error } = await q
+    
+    // 通过 RPC 获取用户名（绕过 users 表 auth.uid()=id 的 SELECT RLS）
+    let userNameMap = {}
+    if (data && data.length > 0) {
+      const userIds = [...new Set(data.map(t => t.user_id).filter(Boolean))]
+      console.log('[home] unique user_ids:', userIds)
+      if (userIds.length > 0) {
+        try {
+          const rpcRes = await new Promise((resolve) => {
+            wx.request({
+              url: SUPABASE_URL + '/rest/v1/rpc/get_user_names',
+              method: 'POST',
+              data: { p_user_ids: userIds.slice(0, 50) },
+              header: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': 'Bearer ' + (wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY),
+              },
+              success: r => resolve(r),
+              fail: e => resolve({ statusCode: 0, data: null })
+            })
+          })
+          console.log('[home] get_user_names RPC status:', rpcRes.statusCode, 'data:', JSON.stringify(rpcRes.data))
+          if (rpcRes.data && Array.isArray(rpcRes.data)) {
+            rpcRes.data.forEach(u => { userNameMap[u.user_id] = u.user_name || '' })
+          }
+        } catch(e) {
+          console.error('[home] get_user_names RPC failed:', e)
+        }
+      }
+    }
+    const showRecorder = Object.keys(userNameMap).length > 1
+    console.log('[home] userNameMap:', JSON.stringify(userNameMap), 'showRecorder:', showRecorder)
 
     const PM_DISPLAY = { cash:'现金', wechat:'微信', alipay:'支付宝', bankcard:'银行卡', other:'其他' }
     const txs = (data || []).map(t => ({
@@ -238,20 +474,168 @@ Page({
       categoryIcon: t.category.match(/\p{Emoji}/u) && t.category.match(/\p{Emoji}/u)[0] || (t.type==='income'?'💰':'💸'),
       dateLabel: this.formatDate(t.date, t.created_at),
       canEdit: user.role === 'admin' || t.user_id === user.id,
+      recorderName: userNameMap[t.user_id] || '',
       paymentDisplay: PM_DISPLAY[t.payment_method] || '现金'
     }))
     const totalIncome  = txs.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0)
     const totalExpense = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0)
+    const pendingReimburse = txs.filter(t=>t.is_reimbursable && t.reimbursement_status==='pending' && t.type==='expense')
+      .reduce((s,t)=>s+Number(t.amount),0)
+    // 按日分组（挖财风格）
+    const groupMap = new Map()
+    txs.forEach(t => {
+      if (!groupMap.has(t.date)) {
+        groupMap.set(t.date, { date: t.date, items: [] })
+      }
+      groupMap.get(t.date).items.push(t)
+    })
+    const weekDays = ['周日','周一','周二','周三','周四','周五','周六']
+    const dailyGroups = []
+    // 保持按日期降序
+    const sortedDates = [...groupMap.keys()].sort((a, b) => b.localeCompare(a))
+    for (const d of sortedDates) {
+      const items = groupMap.get(d).items
+      const dInc = items.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0)
+      const dExp = items.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0)
+      const dObj = new Date(d + 'T00:00:00')
+      const md = `${dObj.getMonth()+1}/${dObj.getDate()}`
+      const wd = weekDays[dObj.getDay()]
+      dailyGroups.push({
+        date: d,
+        dateLabel: `${md} ${wd}`,
+        income: dInc.toFixed(2),
+        expense: dExp.toFixed(2),
+        items
+      })
+    }
     this.setData({
-      transactions: txs, loading: false,
+      transactions: txs, dailyGroups, loading: false,
+      currentLedger: { ...currentLedger, isShared: hasMembers, displayName: (hasMembers ? '[共同]' : '') + (currentLedger.name || '') },
+      showRecorder,
       totalIncome: totalIncome.toFixed(2),
       totalExpense: totalExpense.toFixed(2),
-      balance: (totalIncome - totalExpense).toFixed(2)
+      balance: (totalIncome - totalExpense).toFixed(2),
+      pendingReimburseTotal: pendingReimburse.toFixed(2)
+    })
+
+    // 副产物：统计近期类别使用频次（仅当月数据，用于 buildTree 排序）
+    this._updateCatFreq(txs)
+  },
+
+  // 独立查询近 7 天全量事务，按类别名统计频次
+  async loadCatFreq() {
+    const { currentLedger } = this.data
+    if (!currentLedger || !currentLedger.id) return
+    const start7 = bjDaysAgo(7)
+    const end = bjToday()
+    const { data } = await supabase.from('transactions')
+      .select('category,date')
+      .eq('ledger_id', currentLedger.id)
+      .gte('date', start7)
+      .lte('date', end)
+      .limit(2000)
+    if (!data || data.length === 0) return
+    const freq = {}
+    data.forEach(t => {
+      if (!t.category) return
+      freq[t.category] = (freq[t.category] || 0) + 1
+    })
+    this.setData({ catFreq: freq })
+  },
+
+  // 按当前月份条目统计类别使用频次（fallback，不衰减）
+  _updateCatFreq(txs) {
+    const freq = {}
+    txs.forEach(t => {
+      if (!t.category) return
+      freq[t.category] = (freq[t.category] || 0) + 1
+    })
+    const prevFreq = this.data.catFreq || {}
+    Object.entries(prevFreq).forEach(([k, v]) => {
+      if (!freq[k]) freq[k] = v
+    })
+    this.setData({ catFreq: freq })
+  },
+
+  // ── 月份切换 ──
+  prevMonth() {
+    let { currentYear, currentMonth } = this.data
+    if (currentMonth === 1) {
+      currentMonth = 12
+      currentYear -= 1
+    } else {
+      currentMonth -= 1
+    }
+    this.setData({
+      currentYear, currentMonth,
+      monthLabel: `${currentYear}年${currentMonth}月`
+    })
+    this.loadData()
+  },
+
+  nextMonth() {
+    let { currentYear, currentMonth } = this.data
+    const now = new Date()
+    const nowY = now.getFullYear()
+    const nowM = now.getMonth() + 1
+    // 不允许超过当月
+    if (currentYear === nowY && currentMonth >= nowM) return
+    if (currentMonth === 12) {
+      currentMonth = 1
+      currentYear += 1
+    } else {
+      currentMonth += 1
+    }
+    // 二次校验
+    if (currentYear > nowY || (currentYear === nowY && currentMonth > nowM)) return
+    this.setData({
+      currentYear, currentMonth,
+      monthLabel: `${currentYear}年${currentMonth}月`
+    })
+    this.loadData()
+  },
+
+  openMonthPicker() {
+    const now = new Date()
+    const nowY = now.getFullYear()
+    // 从当前年份往前10年，往后0年（不允许超当月）
+    const years = []
+    for (let y = nowY; y >= nowY - 10; y--) {
+      years.push(`${y}年`)
+    }
+    const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
+    // 计算当前选中值在 picker 中的索引
+    const yearIndex = nowY - this.data.currentYear
+    const monthIndex = this.data.currentMonth - 1
+    this.setData({
+      monthPickerVisible: true,
+      monthPickerRange: [years, months],
+      monthPickerValue: [Math.min(yearIndex, years.length - 1), monthIndex]
     })
   },
 
+  closeMonthPicker() {
+    this.setData({ monthPickerVisible: false })
+  },
+
+  onMonthPickerChange(e) {
+    const [yearIdx, monthIdx] = e.detail.value
+    const years = this.data.monthPickerRange[0]
+    const yearStr = years[yearIdx].replace('年', '')
+    const year = parseInt(yearStr)
+    const month = monthIdx + 1
+    this.setData({
+      currentYear: year,
+      currentMonth: month,
+      monthLabel: `${year}年${month}月`,
+      monthPickerVisible: false,
+      monthPickerValue: [yearIdx, monthIdx]
+    })
+    this.loadData()
+  },
+
   async loadCatTree() {
-    const { currentLedger } = this.data
+    const { currentLedger, catFreq } = this.data
     if (!currentLedger || !currentLedger.id) return
     const { data } = await supabase.from('categories').select('id,name,icon,type,parent_id,level')
       .eq('ledger_id', currentLedger.id).order('level').order('name')
@@ -261,7 +645,7 @@ Page({
       await initDefaultCategories(supabase, currentLedger.id)
       const { data: fresh } = await supabase.from('categories').select('id,name,icon,type,parent_id,level')
         .eq('ledger_id', currentLedger.id).order('level').order('name')
-      this.buildTree(fresh || [])
+      this.buildTree(fresh || [], catFreq)
       return
     }
 
@@ -282,46 +666,74 @@ Page({
       await initDefaultCategories(supabase, currentLedger.id)
       const { data: fresh } = await supabase.from('categories').select('id,name,icon,type,parent_id,level')
         .eq('ledger_id', currentLedger.id).order('level').order('name')
-      this.buildTree(fresh || [])
+      this.buildTree(fresh || [], catFreq)
       return
     }
 
-    this.buildTree(data)
+    this.buildTree(data, catFreq)
   },
 
-  buildTree(data) {
+  buildTree(data, freqMap) {
+    const freq = freqMap || this.data.catFreq || {}
     const map = {}; const roots = []
-    ;(data||[]).forEach(c => { map[c.id] = {...c, children: []} })
+    ;(data||[]).forEach(c => { map[c.id] = {...c, children: [], freq: freq[c.name] || 0} })
     ;(data||[]).forEach(c => {
       if (c.parent_id && map[c.parent_id]) map[c.parent_id].children.push(map[c.id])
       else if (!c.parent_id) roots.push(map[c.id])
     })
+    // 自底向上聚合：子节点频次累加到父节点
+    const aggregateUp = (node) => {
+      if (node.children && node.children.length > 0) {
+        for (const child of node.children) aggregateUp(child)
+        node.freq += node.children.reduce((s, c) => s + c.freq, 0)
+      }
+    }
+    roots.forEach(r => aggregateUp(r))
+    // 按频次降序排列
+    const sortByFreq = (nodes) => {
+      nodes.sort((a, b) => b.freq - a.freq)
+      for (const n of nodes) {
+        if (n.children && n.children.length > 0) sortByFreq(n.children)
+      }
+    }
+    sortByFreq(roots)
     this.setData({ catTree: roots })
     this.updateCurrentCats('expense')
   },
 
   updateCurrentCats(type) {
-    const cats = this.data.catTree.filter(c=>c.type===type).map(c=>({...c, hasChildren: c.children&&c.children.length>0}))
+    const cats = this.data.catTree
+      .filter(c => c.type === type)
+      .map(c => ({...c, hasChildren: c.children && c.children.length > 0}))
     this.setData({ currentCats: cats })
   },
 
   formatDate(dateStr, createdAt) {
     const d = new Date(dateStr)
-    const t = new Date(createdAt)
-    const h = String(t.getHours()).padStart(2, '0')
-    const m = String(t.getMinutes()).padStart(2, '0')
+    let h, m
+    // ES6把无时区datetime当本地时间解析，所以不能用 new Date() 直接取
+    // 用正则从原始字符串取值，统一按UTC→+8北京处理
+    if (createdAt && createdAt.includes('T')) {
+      const parts = createdAt.split('T')[1].split(':').map(Number)
+      h = String((parts[0] + 8) % 24).padStart(2, '0')
+      m = String(isNaN(parts[1]) ? 0 : parts[1]).padStart(2, '0')
+    } else {
+      const t = new Date(Date.now())
+      h = String((t.getUTCHours() + 8) % 24).padStart(2, '0')
+      m = String(t.getUTCMinutes()).padStart(2, '0')
+    }
     return `${d.getMonth()+1}月${d.getDate()}日 ${h}:${m}`
   },
 
   // ── 记账弹窗 ──
   openQuickAdd() {
-    if (!this.requireLogin('记账')) return  // 检查登录
+    // 游客也可以打开记账弹窗浏览，保存时才检查登录
+    this.updateCurrentCats('expense')  // 每次打开弹窗按最新频次排序
     this.setData({
       showQuickAdd: true, qaType: 'expense', qaAmount: '', qaCategory: '', qaNote: '',
-      qaDate: new Date().toISOString().split('T')[0],
-      qaExpandedKey: null, subCats: [], qaPaymentMethod: 'cash'
+      qaDate: bjToday(),
+      qaExpandedKey: null, subCats: [], qaPaymentMethod: 'cash', qaReimbursable: false
     })
-    this.updateCurrentCats('expense')
   },
   closeQuickAdd() { this.setData({ showQuickAdd: false }) },
   setQaType(e) {
@@ -332,6 +744,7 @@ Page({
   onAmountInput(e) { this.setData({ qaAmount: e.detail.value }) },
   onNoteInput(e)   { this.setData({ qaNote: e.detail.value }) },
   onQaDateChange(e) { this.setData({ qaDate: e.detail.value }) },
+  onQaReimburseTap() { this.setData({ qaReimbursable: !this.data.qaReimbursable }) },
   onQaPaymentChange(e) { this.setData({ qaPaymentMethod: e.currentTarget.dataset.id }) },
 
   onCatTap(e) {
@@ -371,16 +784,23 @@ Page({
   },
 
   async handleQuickAdd() {
-    const { currentLedger, user, qaType, qaAmount, qaCategory, qaNote, qaDate, qaPaymentMethod } = this.data
+    // 游客点保存时检查登录
+    if (!this.requireLogin('保存')) return
+    const { currentLedger, user, qaType, qaAmount, qaCategory, qaNote, qaDate, qaPaymentMethod, qaReimbursable } = this.data
     if (!qaAmount || !qaCategory) return wx.showToast({ title: '请填写金额并选择分类', icon: 'none' })
     this.setData({ qaLoading: true })
     try {
-      const { error } = await supabase.from('transactions').insert([{
+      const record = {
         ledger_id: currentLedger.id, user_id: user.id,
         amount: parseFloat(qaAmount), type: qaType,
         category: qaCategory, note: qaNote, date: qaDate,
         payment_method: qaPaymentMethod
-      }])
+      }
+      if (qaType === 'expense' && qaReimbursable) {
+        record.is_reimbursable = true
+        record.reimbursement_status = 'pending'
+      }
+      const { error } = await supabase.from('transactions').insert([record])
       if (error) throw new Error(error.message)
       this.setData({ showQuickAdd: false })
       wx.showToast({ title: '记账成功', icon: 'success' })
@@ -395,7 +815,10 @@ Page({
   // ── 编辑 ──
   onEditTap(e) {
     if (!this.requireLogin('编辑')) return
-    const tx = this.data.transactions[e.currentTarget.dataset.index]
+    const { date, index } = e.currentTarget.dataset
+    const group = this.data.dailyGroups.find(g => g.date === date)
+    const tx = group ? group.items[index] : null
+    if (!tx) return
     const editCats = this.data.catTree.filter(c=>c.type===tx.type)
     let matchedCategory = tx.category || ''
     if (!editCats.find(c=>c.name===tx.category)) {
@@ -409,6 +832,7 @@ Page({
       editType: tx.type, editAmount: String(tx.amount),
       editCategory: matchedCategory, editNote: tx.note||'', editDate: tx.date,
       editCats, editPaymentMethod: tx.payment_method || 'cash',
+      editReimbursable: !!tx.is_reimbursable,
       editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [],
     })
   },
@@ -456,17 +880,26 @@ Page({
     this.setData({ editCategory: this.data.editExpandedKey, editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [] })
   },
   onEditPaymentChange(e) { this.setData({ editPaymentMethod: e.currentTarget.dataset.id }) },
+  onEditReimburseTap() { this.setData({ editReimbursable: !this.data.editReimbursable }) },
 
   async handleEdit() {
-    const { editTx, editType, editAmount, editCategory, editNote, editDate, editPaymentMethod } = this.data
+    const { editTx, editType, editAmount, editCategory, editNote, editDate, editPaymentMethod, editReimbursable } = this.data
     if (!editAmount || !editCategory) return wx.showToast({ title: '请填写金额并选择分类', icon: 'none' })
     this.setData({ editLoading: true })
     try {
-      const { error } = await supabase.from('transactions').update({
+      const update = {
         type: editType, amount: parseFloat(editAmount),
         category: editCategory, note: editNote, date: editDate,
         payment_method: editPaymentMethod
-      }).eq('id', editTx.id)
+      }
+      if (editType === 'expense' && editReimbursable) {
+        update.is_reimbursable = true
+        if (!editTx.reimbursement_status) update.reimbursement_status = 'pending'
+      } else if (!editReimbursable) {
+        update.is_reimbursable = false
+        update.reimbursement_status = null
+      }
+      const { error } = await supabase.from('transactions').update(update).eq('id', editTx.id)
       if (error) throw new Error(error.message)
       this.setData({ showEdit: false })
       wx.showToast({ title: '修改成功', icon: 'success' })
@@ -498,6 +931,94 @@ Page({
     })
   },
 
+  onDeleteTap(e) {
+    if (!this.requireLogin('删除')) return
+    const { date, index } = e.currentTarget.dataset
+    const group = this.data.dailyGroups.find(g => g.date === date)
+    const tx = group ? group.items[index] : null
+    if (!tx) return
+    wx.showModal({
+      title: '确认删除',
+      content: '删除后无法恢复，确定删除这条记录吗？',
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          const { error } = await supabase.from('transactions').delete().eq('id', tx.id)
+          if (error) throw new Error(error.message)
+          wx.showToast({ title: '删除成功', icon: 'success' })
+          this.loadData()
+        } catch(e) {
+          wx.showToast({ title: e.message || '删除失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
+  // 已报销状态切换
+  async onReimburseStatusTap(e) {
+    if (!this.requireLogin('操作')) return
+    const { date, index } = e.currentTarget.dataset
+    const group = this.data.dailyGroups.find(g => g.date === date)
+    const tx = group ? group.items[index] : null
+    if (!tx) return
+    const nextStatus = tx.reimbursement_status === 'pending' ? 'paid' : 'pending'
+    const statusLabel = nextStatus === 'paid' ? '已到账' : '待报销'
+    wx.showModal({
+      title: '报销状态',
+      content: `将这笔报销标记为「${statusLabel}」吗？`,
+      success: async (res) => {
+        if (!res.confirm) return
+        try {
+          const { error } = await supabase.from('transactions').update({
+            reimbursement_status: nextStatus
+          }).eq('id', tx.id)
+          if (error) throw new Error(error.message)
+          wx.showToast({ title: '已更新', icon: 'success' })
+          this.loadData()
+        } catch(e) {
+          wx.showToast({ title: e.message || '操作失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
+  toggleReimbursableFilter() {
+    this.setData({ showReimbursableOnly: !this.data.showReimbursableOnly })
+  },
+
+  // 月度报销核销
+  async settleAllReimburse() {
+    if (!this.requireLogin('操作')) return
+    const pending = []
+    ;(this.data.dailyGroups||[]).forEach(g => {
+      (g.items||[]).forEach(t => {
+        if (t.is_reimbursable && t.reimbursement_status === 'pending') pending.push(t)
+      })
+    })
+    if (pending.length === 0) {
+      wx.showToast({ title: '没有待核销的报销', icon: 'none' })
+      return
+    }
+    const totalAmount = pending.reduce((s, t) => s + Number(t.amount), 0)
+    wx.showModal({
+      title: '月度核销',
+      content: `共 ${pending.length} 笔待报销，合计 ¥${totalAmount.toFixed(2)}\n确认全部核销为已到账？`,
+      success: async res => {
+        if (!res.confirm) return
+        try {
+          const ids = pending.map(t => t.id)
+          for (const id of ids) {
+            await supabase.from('transactions').update({ reimbursement_status: 'paid' }).eq('id', id)
+          }
+          wx.showToast({ title: `已核销 ${ids.length} 笔`, icon: 'success' })
+          this.loadData()
+        } catch(e) {
+          wx.showToast({ title: e.message || '核销失败', icon: 'none' })
+        }
+      }
+    })
+  },
+
   // ── 创建账本 ──
   showCreateLedgerModal() { this.setData({ showCreateLedger: true, newLedgerName: '' }) },
   hideCreateLedger() { this.setData({ showCreateLedger: false }) },
@@ -519,7 +1040,7 @@ Page({
       app.saveDefaultLedger(ledger)
       // 初始化预置分类
       await initDefaultCategories(supabase, ledger.id)
-      this.setData({ showCreateLedger: false, currentLedger: ledger })
+      this.setData({ showCreateLedger: false, currentLedger: { ...ledger, isShared: false, displayName: ledger.name || '' } })
       wx.showToast({ title: '创建成功', icon: 'success' })
       this.loadData()
       this.loadCatTree()
@@ -555,7 +1076,7 @@ Page({
           const rows = [['日期', '时间', '类型', '金额', '类别', '子类别', '备注', '支付方式', '记账人']]
           data.forEach(t => {
             rows.push([
-              t.date || '', t.created_at ? t.created_at.slice(11, 16) : '',
+              t.date || '', t.created_at ? (() => { const parts = t.created_at.split('T')[1].split(':').map(Number); return String((parts[0] + 8) % 24).padStart(2, '0') + ':' + String(parts[1] || 0).padStart(2, '0') })() : '',
               t.type === 'income' ? '收入' : '支出', t.amount || '0',
               t.category || '', t.sub_category || '',
               (t.note || '').replace(/"/g, '""'),
@@ -565,7 +1086,7 @@ Page({
           })
           const csv = rows.map(r => r.map(c => '"' + c + '"').join(',')).join('\n')
           const fs = wx.getFileSystemManager()
-          const fileName = `${currentLedger.name}_${new Date().toISOString().split('T')[0]}.csv`
+          const fileName = `${currentLedger.name}_${bjToday()}.csv`
           const filePath = `${wx.env.USER_DATA_PATH}/${fileName}`
           fs.writeFile({
             filePath, data: '\uFEFF' + csv, encoding: 'utf8',

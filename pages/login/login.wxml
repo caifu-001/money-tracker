@@ -1,4 +1,4 @@
-// pages/login/login.wxml
+﻿// pages/login/login.wxml
 <view class="page">
 
   <!-- 顶部装饰背景 -->
@@ -135,9 +135,15 @@
 
   </view>
 
+  <!-- 暂不登录 -->
+  <view class="skip-login-row">
+    <text class="skip-login-link" bindtap="dismissLogin">暂不登录，先看看</text>
+  </view>
+
+
   <!-- 底部 -->
   <view class="page-footer">
-    <text class="footer-version">游游记账 v4.0.1</text>
+    <text class="footer-version">游游记账 v5.1.1</text>
     <view class="footer-links-row">
       <text class="footer-link" bindtap="goAgreement">用户协议</text>
       <text class="footer-sep">|</text>

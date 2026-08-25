@@ -1,4 +1,4 @@
-// pages/settings/settings.js
+﻿// pages/settings/settings.js
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
 
@@ -104,7 +104,7 @@ Page({
   goAgreement() { wx.navigateTo({ url: '/pages/agreement/agreement' }) },
   goPrivacy()   { wx.navigateTo({ url: '/pages/privacy/privacy' }) },
   goAdmin()     { wx.switchTab({ url: '/pages/admin/admin' }) },
-  goAbout()     { wx.showModal({ title: '游游记账 v4.0.1', content: '家庭协同记账工具\n支持多账本、预算管理、数据分析', showCancel: false }) },
+  goAbout()     { wx.showModal({ title: '游游记账 v5.1.1', content: '家庭协同记账工具\n支持多账本、预算管理、数据分析', showCancel: false }) },
 
   // 删除我的账号
   handleDeleteAccount() {

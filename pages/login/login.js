@@ -1,6 +1,6 @@
 // pages/login/login.js
 const app = getApp()
-const { supabase, SUPABASE_URL } = require('../../utils/supabase')
+const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } = require('../../utils/supabase')
 
 // 微信登录配置（必填）
 const WECHAT_APPID = 'wx30ef5296dd2cd8f7'  // 替换为你的小程序 AppID
@@ -25,19 +25,23 @@ Page({
 
   onLoad() {
     this.setData({ appName: '游游记账' })
-    const today = new Date().toISOString().split('T')[0]
-    const lastDate = wx.getStorageSync('session_date')
-    const userInfo = wx.getStorageSync('user_info')
-    if (lastDate === today && userInfo) {
-      // 强制重新查数据库刷新 role，防止管理员改完角色后当天缓存不更新
-      this.refreshUserRole(userInfo, (freshUser) => {
-        app.globalData.user = freshUser
-        this.restoreDefaultLedger(freshUser)
-        wx.switchTab({ url: '/pages/home/home' })
-      })
+    // 老用户：app.js 已静默恢复 → 秒跳首页，零网络请求
+    if (app.globalData.user) {
+      wx.switchTab({ url: '/pages/home/home' })
       return
     }
-    // 尝试微信静默登录
+    // 兜底：app.js 未恢复但 Storage 有有效 session（7 天有效）
+    const userInfo = wx.getStorageSync('user_info')
+    const sessionDate = wx.getStorageSync('session_date')
+    const SESSION_TTL_MS = 7 * 86400000
+    if (userInfo && sessionDate && (Date.now() - new Date(sessionDate + 'T00:00:00').getTime() <= SESSION_TTL_MS)) {
+      app.globalData.user = userInfo
+      const cachedLedger = app.getDefaultLedger()
+      if (cachedLedger) app.globalData.currentLedger = cachedLedger
+      wx.switchTab({ url: '/pages/home/home' })
+      return
+    }
+    // 新用户：尝试微信静默登录
     this.tryWechatLogin()
   },
 
@@ -70,39 +74,24 @@ Page({
   },
 
     // 更新用户最后登录时间（直接用 REST API）
-  async _updateLastLogin(userId) {
+    async _updateLastLogin(userId) {
     try {
-      const token = wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY
-      console.log('[_updateLastLogin] ====== 开始更新 last_login ======')
-      console.log('[_updateLastLogin] 用户ID:', userId)
-      console.log('[_updateLastLogin] Token 前20位:', token.substring(0, 20) + '...')
-      const res = await new Promise((resolve) => {
+      await new Promise((resolve) => {
         wx.request({
-          url: SUPABASE_URL + '/rest/v1/users?id=eq.' + userId,
-          method: 'PATCH',
+          url: SUPABASE_URL + '/rest/v1/rpc/update_last_login',
+          method: 'POST',
           header: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_ANON_KEY,
-            'Authorization': 'Bearer ' + token,
-            'Prefer': 'return=minimal'
+            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
           },
-          data: { last_login: new Date().toISOString() },
-          success: r => {
-            console.log('[_updateLastLogin] 请求成功，状态码:', r.statusCode)
-            resolve(r)
-          },
-          fail: (e) => {
-            console.error('[_updateLastLogin] 请求失败:', e)
-            resolve(null)
-          }
+          data: { p_user_id: userId },
+          success: () => resolve(),
+          fail: () => resolve()
         })
       })
-      console.log('[_updateLastLogin] 完整响应:', JSON.stringify(res))
-      console.log('[_updateLastLogin] ====== 更新完成 ======')
-      return res
     } catch(e) {
-      console.error('[_updateLastLogin] 异常:', e)
-      return null
+      console.error('[_updateLastLogin]', e)
     }
   },
 
@@ -450,12 +439,25 @@ Page({
       console.log('[handleLogin] 登录成功，准备更新 last_login，用户ID:', user.id)
       await this._updateLastLogin(user.id)
       console.log('[handleLogin] last_login 更新完成')
-      const { data: ledgers } = await supabase.from('ledgers').select('*').eq('owner_id', data.user.id).order('created_at')
+      // 同时查 own + member 账本
+      const [ownRes, memberRes] = await Promise.all([
+        supabase.from('ledgers').select('*').eq('owner_id', data.user.id).order('created_at'),
+        supabase.from('ledger_members').select('ledger_id').eq('user_id', data.user.id)
+      ])
+      const ownLedgers = ownRes.data || []
+      const memberIds = (memberRes.data || []).map(m => m.ledger_id)
+      let memberLedgers = []
+      if (memberIds.length > 0) {
+        const { data: ml } = await supabase.from('ledgers').select('*').in('id', memberIds)
+        memberLedgers = ml || []
+      }
+      let allLedgers = [...ownLedgers]
+      for (const ml of memberLedgers) { if (!allLedgers.find(l => l.id === ml.id)) allLedgers.push(ml) }
       let ledger = null
-      if (ledgers && ledgers.length > 0) {
+      if (allLedgers.length > 0) {
         const defaultLedger = app.getDefaultLedger()
-        const saved = defaultLedger ? ledgers.find(l => l.id === defaultLedger.id) : null
-        ledger = saved || ledgers[0]
+        const saved = defaultLedger ? allLedgers.find(l => l.id === defaultLedger.id) : null
+        ledger = saved || allLedgers[0]
       }
       app.onLoginSuccess(user, ledger)
       wx.switchTab({ url: '/pages/home/home' })
@@ -485,6 +487,11 @@ Page({
 
   goPrivacy()   { wx.navigateTo({ url: '/pages/privacy/privacy' }) },
   goAgreement() { wx.navigateTo({ url: '/pages/agreement/agreement' }) },
+
+  // 审核要求：用户可拒绝登录/注册，返回首页浏览
+  dismissLogin() {
+    wx.switchTab({ url: '/pages/home/home' })
+  },
 
   // 切换协议同意状态
   toggleAgree() {

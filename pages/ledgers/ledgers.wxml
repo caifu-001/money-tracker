@@ -1,4 +1,12 @@
 <view class="page">
+<!-- 游客浏览提示条 -->
+<view class="guest-banner" wx:if="{{!user}}">
+<view class="gb-inner">
+<text class="gb-text">正在浏览，登录后即可使用</text>
+<text class="gb-login-btn" bindtap="goLogin">登录</text>
+</view>
+</view>
+
 <view class="header-card">
   <view class="header-circle header-circle1"></view>
   <view class="header-circle header-circle2"></view>
@@ -11,6 +19,12 @@
   <text class="create-icon">➕</text>
   <text class="create-text">新建账本</text>
   <text class="create-arrow {{showCreate?'rotate':''}}">▼</text>
+</view>
+
+<view class="join-card" bindtap="goJoin">
+  <text class="join-icon">🔗</text>
+  <text class="join-text">加入他人账本</text>
+  <text class="join-arrow">›</text>
 </view>
 
 <view class="create-form" wx:if="{{showCreate}}">
@@ -34,18 +48,25 @@
 <view class="ledger-list" wx:if="{{!loading}}">
   <block wx:for="{{ledgers}}" wx:key="id">
     <view class="ledger-item {{currentLedger && currentLedger.id===item.id?'current':''}}" bindtap="switchLedger" data-index="{{index}}">
-      <!-- 默认标签 -->
-      <view class="default-tag" wx:if="{{getDefaultId() === item.id}}">⭐ 默认</view>
-      
+      <!-- ledger name with inline badge -->
       <view class="ledger-main">
         <view class="ledger-icon">📒</view>
         <view class="ledger-info">
-          <text class="ledger-name">{{item.name}}</text>
+          <text class="ledger-name">{{item.displayName || item.name}}<text class="default-tag-inline" wx:if="{{getDefaultId() === item.id}}"> ⭐默认</text></text>
           <text class="ledger-date">{{item.created_at}}</text>
         </view>
         <view class="ledger-check" wx:if="{{currentLedger && currentLedger.id===item.id}}">✓</view>
       </view>
       
+      <!-- 内联编辑表单 -->
+      <view class="edit-inline" wx:if="{{editingId === item.id}}">
+        <input class="edit-input" placeholder="输入新名称" value="{{editName}}" bindinput="onEditNameInput" focus="{{true}}"/>
+        <view class="edit-btns">
+          <view class="edit-save-btn" catchtap="saveEdit" data-index="{{index}}">保存</view>
+          <view class="edit-cancel-btn" catchtap="cancelEdit">取消</view>
+        </view>
+      </view>
+
       <view class="ledger-actions">
         <!-- 设为默认按钮 -->
         <view class="action-btn {{getDefaultId() === item.id ? 'default-active' : ''}}" 
@@ -57,6 +78,10 @@
               wx:if="{{!(currentLedger && currentLedger.id===item.id)}}" 
               catchtap="switchLedger" data-index="{{index}}">
           <text>切换</text>
+        </view>
+        <!-- 编辑按钮 -->
+        <view class="action-btn edit-btn" catchtap="startEdit" data-index="{{index}}">
+          <text>编辑</text>
         </view>
         <!-- 删除按钮 -->
         <view class="action-btn del-btn" catchtap="handleDelete" data-index="{{index}}">

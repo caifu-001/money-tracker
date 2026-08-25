@@ -1,4 +1,4 @@
-<view class="page">
+﻿<view class="page">
 <!-- 游客提示 -->
 <view class="guest-tip-card" wx:if="{{isGuest}}">
   <text class="guest-tip-icon">🔐</text>
@@ -84,7 +84,51 @@
 
 <!-- 账户 Tab -->
 <block wx:if="{{tab==='account' && !loading}}">
-<view class="section-title">个人信息</view>
+<view class="section-title">基本信息</view>
+<view class="info-card">
+<view class="info-row">
+<text class="info-label">用户ID</text>
+<text class="info-value info-value-sm">{{profile.idShown}}</text>
+</view>
+<view class="divider"></view>
+<view class="info-row">
+<text class="info-label">注册邮箱</text>
+<text class="info-value">{{profile.email || '--'}}</text>
+</view>
+<view class="divider"></view>
+<view class="info-row">
+<text class="info-label">身份</text>
+<text class="role-tag {{profile.roleClass}}">{{profile.roleName}}</text>
+</view>
+<view class="divider"></view>
+<view class="info-row">
+<text class="info-label">状态</text>
+<text class="status-tag {{profile.status}}">{{profile.statusName}}</text>
+</view>
+</view>
+
+<view class="section-title">时间信息</view>
+<view class="info-card">
+<view class="info-row">
+<text class="info-label">注册时间</text>
+<text class="info-value">{{profile.createdDate}}</text>
+</view>
+<view class="divider"></view>
+<view class="info-row">
+<text class="info-label">最后登录</text>
+<text class="info-value">{{profile.loginDate}}</text>
+</view>
+</view>
+
+<view class="section-title">账本统计</view>
+<view class="info-card">
+<view class="info-row">
+<text class="info-label">拥有账本</text>
+<text class="info-value">{{profile.ledgerCount}} 个</text>
+</view>
+</view>
+
+<view class="section-title">编辑昵称</view>
 <view class="info-card">
 <view class="info-row">
 <text class="info-label">昵称</text>
@@ -92,18 +136,58 @@
 </view>
 </view>
 <view class="save-btn" bindtap="handleSaveProfile"><text>保存昵称</text></view>
+
+<view class="section-title" style="margin-top: 8rpx;">关于</view>
 <view class="about-btn" bindtap="goAbout"><text>关于游游记账</text></view>
+<view class="about-btn" bindtap="goAgreement"><text>用户协议</text></view>
+<view class="about-btn" bindtap="goPrivacy"><text>隐私协议</text></view>
+<view class="version-text"><text>游游记账 v5.1.1</text></view>
 </block>
 
 <!-- 账本 Tab -->
 <block wx:if="{{tab==='ledgers' && !loading}}">
-<view class="section-title">我的账本</view>
+<view class="ledger-tab-header">
+  <text class="section-title">我的账本</text>
+  <view class="manage-all-btn" bindtap="goLedgersPage">完整管理 ›</view>
+</view>
+
+<!-- 新建 -->
+<view class="create-card" bindtap="toggleCreate" wx:if="{{!showCreate}}">
+  <text class="create-icon">➕</text>
+  <text class="create-text">新建账本</text>
+</view>
+<view class="create-form" wx:if="{{showCreate}}">
+  <view class="form-row">
+    <input class="card-input" placeholder="输入账本名称" value="{{newLedgerName}}" bindinput="onNewLedgerNameInput"/>
+  </view>
+  <view class="form-btns">
+    <view class="primary-btn" bindtap="handleCreateLedger">创建</view>
+    <view class="secondary-btn" bindtap="toggleCreate">取消</view>
+  </view>
+</view>
+
 <view class="ledger-list">
-<view class="ledger-item {{currentLedger.id===item.id?'current':''}}" wx:for="{{myLedgers}}" wx:key="id" bindtap="switchLedger" data-ledger="{{item}}">
-<text class="ledger-icon">📒</text>
-<text class="ledger-name">{{item.name}}</text>
-<text class="ledger-type">{{item.type==='personal'?'个人':'家庭'}}</text>
-<text class="ledger-check" wx:if="{{currentLedger.id===item.id}}">✓</text>
+<view class="ledger-item {{currentLedger && currentLedger.id===item.id?'current':''}}" wx:for="{{myLedgers}}" wx:key="id">
+  <view class="ledger-main" bindtap="switchLedger" data-ledger="{{item}}">
+    <text class="ledger-icon">📒</text>
+    <view class="ledger-info">
+      <text class="ledger-name">{{item.displayName || item.name}}</text>
+      <text class="ledger-type">{{item.type==='personal'?'个人':'家庭'}}</text>
+    </view>
+    <text class="ledger-check" wx:if="{{currentLedger && currentLedger.id===item.id}}">✓</text>
+  </view>
+  <!-- 内联编辑 -->
+  <view class="edit-inline" wx:if="{{editingLedgerId === item.id}}">
+    <input class="edit-input" placeholder="输入新名称" value="{{editLedgerName}}" bindinput="onEditLedgerNameInput" focus="{{true}}"/>
+    <view class="edit-btns">
+      <view class="edit-save-btn" catchtap="saveLedgerName" data-id="{{item.id}}">保存</view>
+      <view class="edit-cancel-btn" catchtap="cancelEditLedger">取消</view>
+    </view>
+  </view>
+  <view class="ledger-actions" wx:if="{{editingLedgerId !== item.id}}">
+    <view class="action-btn edit-btn" catchtap="startEditLedger" data-index="{{index}}">编辑</view>
+    <view class="action-btn del-btn" catchtap="handleDeleteLedger" data-index="{{index}}">删除</view>
+  </view>
 </view>
 </view>
 <view wx:if="{{myLedgers.length===0}}" class="empty-state"><text>暂无账本</text></view>

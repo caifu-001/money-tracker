@@ -347,3 +347,16 @@ page { background: #f0f2f7; }
 }
 .footer-link { font-size: 24rpx; color: #6366f1; font-weight: 500; }
 .footer-sep { font-size: 22rpx; color: #d1d5db; }
+
+/* ===== 暂不登录 ===== */
+.skip-login-row {
+  display: flex;
+  justify-content: center;
+  padding: 24rpx 0 40rpx;
+  background: #fff;
+}
+.skip-login-link {
+  font-size: 28rpx;
+  color: #9ca3af;
+  padding: 12rpx 32rpx;
+}

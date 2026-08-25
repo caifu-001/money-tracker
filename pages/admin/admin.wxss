@@ -79,6 +79,7 @@ page { background: #f0f2f7; }
 .info-row { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; }
 .info-label { font-size: 26rpx; color: #6b7280; }
 .info-value { font-size: 28rpx; color: #1f2937; font-weight: 500; }
+.info-value-sm { font-size: 24rpx; color: #6b7280; font-family: monospace; }
 .info-input { flex: 1; text-align: right; font-size: 28rpx; color: #1f2937; background: #f3f4f6; padding: 16rpx 24rpx; border-radius: 16rpx; }
 .divider { height: 1rpx; background: #f3f4f6; margin: 8rpx 0; }
 
@@ -115,16 +116,55 @@ page { background: #f0f2f7; }
 .member-role { font-size: 22rpx; color: #9ca3af; }
 
 /* 账本列表 */
+.ledger-tab-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 32rpx 40rpx 16rpx;
+}
+.ledger-tab-header .section-title { padding: 0; }
+.manage-all-btn {
+  font-size: 24rpx; color: #6366f1; font-weight: 500;
+  background: #ede9fe; padding: 8rpx 20rpx; border-radius: 20rpx;
+}
+
+/* 新建账本 */
+.create-card {
+  margin: 0 32rpx 16rpx;
+  background: #fff; border-radius: 20rpx; border: 2rpx dashed #c7d2fe;
+  padding: 24rpx 32rpx; display: flex; align-items: center;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
+}
+.create-icon { font-size: 28rpx; margin-right: 16rpx; }
+.create-text { font-size: 26rpx; color: #6366f1; font-weight: 500; }
+.create-form { margin: 0 32rpx 16rpx; background: #fff; border-radius: 20rpx; padding: 24rpx 32rpx; box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06); }
+.form-row { margin-bottom: 20rpx; }
+.card-input { width: 100%; height: 88rpx; background: #f9fafb; border-radius: 16rpx; padding: 0 24rpx; font-size: 28rpx; color: #1f2937; box-sizing: border-box; border: 2rpx solid #e5e7eb; }
+.form-btns { display: flex; gap: 16rpx; }
+.primary-btn { flex: 1; height: 80rpx; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 16rpx; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 28rpx; font-weight: 600; }
+.secondary-btn { flex: 1; height: 80rpx; background: #f3f4f6; border-radius: 16rpx; color: #6b7280; display: flex; align-items: center; justify-content: center; font-size: 28rpx; font-weight: 500; }
+
+/* 内联编辑 */
+.edit-inline { margin-top: 12rpx; display: flex; align-items: center; gap: 12rpx; }
+.edit-input { flex: 1; height: 72rpx; background: #f9fafb; border-radius: 12rpx; padding: 0 20rpx; font-size: 26rpx; border: 2rpx solid #6366f1; box-sizing: border-box; }
+.edit-btns { display: flex; gap: 12rpx; }
+.edit-save-btn { height: 72rpx; padding: 0 24rpx; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 12rpx; color: #fff; display: flex; align-items: center; font-size: 24rpx; font-weight: 600; white-space: nowrap; }
+.edit-cancel-btn { height: 72rpx; padding: 0 24rpx; background: #f3f4f6; border-radius: 12rpx; color: #6b7280; display: flex; align-items: center; font-size: 24rpx; white-space: nowrap; }
+
+/* 账本操作按钮 */
+.ledger-main { display: flex; align-items: center; gap: 20rpx; }
+.ledger-info { flex: 1; min-width: 0; }
+.ledger-actions { display: flex; gap: 12rpx; padding-top: 16rpx; margin-top: 12rpx; border-top: 1rpx solid #f3f4f6; }
+.action-btn.edit-btn { background: #f0fdf4; color: #16a34a; }
+.action-btn.del-btn { background: #fef2f2; color: #ef4444; }
 .ledger-list { padding: 0 32rpx; display: flex; flex-direction: column; gap: 16rpx; }
 .ledger-item {
   background: #fff; border-radius: 20rpx;
   padding: 24rpx 28rpx;
-  display: flex; align-items: center;
+  display: flex; flex-direction: column;
   box-shadow: 0 4rpx 12rpx rgba(0,0,0,0.06);
 }
 .ledger-item.current { border: 2rpx solid #6366f1; background: #fafafe; }
 .ledger-icon { font-size: 40rpx; margin-right: 20rpx; }
-.ledger-name { flex: 1; font-size: 28rpx; color: #1f2937; font-weight: 500; }
+.ledger-name { font-size: 28rpx; color: #1f2937; font-weight: 500; }
 .ledger-type { font-size: 22rpx; color: #6366f1; background: #ede9fe; padding: 4rpx 12rpx; border-radius: 10rpx; }
 .ledger-check { font-size: 28rpx; color: #6366f1; margin-left: 12rpx; }
 
@@ -165,6 +205,8 @@ page { background: #f0f2f7; }
   font-size: 22rpx; padding: 4rpx 12rpx; border-radius: 16rpx;
   background: #ede9fe; color: #7c3aed; font-weight: 500;
 }
+.role-tag.role-admin { background: #ede9fe; color: #7c3aed; }
+.role-tag.role-user { background: #e0e7ff; color: #4338ca; }
 /* 第三行：注册时间 + 最后登录 */
 .user-row3 {
   display: flex; align-items: center; gap: 24rpx;
@@ -184,6 +226,9 @@ page { background: #f0f2f7; }
 .save-btn text { color: white; font-size: 30rpx; font-weight: 700; }
 .about-btn { margin: 0 32rpx; background: #f3f4f6; border-radius: 24rpx; padding: 28rpx; text-align: center; }
 .about-btn text { color: #6b7280; font-size: 28rpx; font-weight: 600; }
+
+.version-text { margin-top: 32rpx; text-align: center; padding: 20rpx; }
+.version-text text { color: #c4c4c4; font-size: 24rpx; }
 
 /* 底部弹窗 */
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }

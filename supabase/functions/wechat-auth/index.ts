@@ -47,8 +47,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       openid: wxData.openid,
-      unionid: wxData.unionid || null,
-      session_key: wxData.session_key
+      unionid: wxData.unionid || null
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }

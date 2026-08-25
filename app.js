@@ -11,25 +11,53 @@ App({
   },
 
   onLaunch() {
-    this.checkDailySession()
+    this.restoreSession()
   },
 
-  // 每日强制登录检查
-  checkDailySession() {
-    const today = new Date().toISOString().split('T')[0]
-    const lastDate = wx.getStorageSync('session_date')
-    if (lastDate && lastDate !== today) {
-      // 跨天，清除登录状态（但保留默认账本设置）
-      wx.removeStorageSync('session_date')
-      wx.removeStorageSync('user_info')
+  // 静默恢复登录态 — 老用户秒进，不等任何 DB 请求
+  restoreSession() {
+    const userInfo = wx.getStorageSync('user_info')
+    const sessionDate = wx.getStorageSync('session_date')
+
+    if (!userInfo || !sessionDate) {
       this.globalData.user = null
       this.globalData.currentLedger = null
+      return
+    }
+
+    // session 有效期 7 天，过期才清除
+    const SESSION_TTL_DAYS = 7
+    const sessionMs = new Date(sessionDate + 'T00:00:00').getTime()
+    const nowMs = Date.now()
+    if (nowMs - sessionMs > SESSION_TTL_DAYS * 86400000) {
+      console.log('[app] session 已过期，清除登录态')
+      wx.removeStorageSync('session_date')
+      wx.removeStorageSync('user_info')
+      wx.removeStorageSync('sb_access_token')
+      wx.removeStorageSync('sb_refresh_token')
+      this.globalData.user = null
+      this.globalData.currentLedger = null
+      return
+    }
+
+    // 有效期内直接恢复，零网络请求
+    this.globalData.user = userInfo
+    const cachedLedger = this.getDefaultLedger()
+    if (cachedLedger) {
+      this.globalData.currentLedger = cachedLedger
+    }
+    console.log('[app] 静默恢复 session，user=', userInfo.name, 'ledger=', cachedLedger?.name)
+
+    // 跨天时静默续期 session_date
+    const today = (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0] })()
+    if (sessionDate !== today) {
+      wx.setStorageSync('session_date', today)
     }
   },
 
   // 登录成功后调用
   onLoginSuccess(user, ledger) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0] })()
     wx.setStorageSync('session_date', today)
     wx.setStorageSync('user_info', user)
     this.globalData.user = user

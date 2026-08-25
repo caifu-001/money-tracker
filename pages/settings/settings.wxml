@@ -1,4 +1,4 @@
-<!--pages/settings/settings.wxml-->
+﻿<!--pages/settings/settings.wxml-->
 <view class="page">
   <!-- 用户信息卡片 -->
   <view class="profile-card">
@@ -48,7 +48,7 @@
     <button class="delete-btn" bindtap="handleDeleteAccount">删除账号</button>
   </view>
 
-  <text class="app-version">游游记账 v3.0.3</text>
+  <text class="app-version">游游记账 v5.1.1</text>
 </view>
 
 <!-- 修改昵称弹窗 -->

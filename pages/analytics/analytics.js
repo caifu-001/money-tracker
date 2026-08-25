@@ -7,16 +7,41 @@ const COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#6366f1','#a8
 const INCOME_COLORS = ['#22c55e','#10b981','#34d399','#6ee7b7','#a7f3d0','#059669','#047857','#065f46','#064e3b','#052e16']
 const PAYMENT_COLORS = ['#3b82f6','#06b6d4','#8b5cf6','#ec4899']
 
+// 构建子分类名→一级大类映射（递归遍历4级分类树）
+// 从数据库类别扁平列表构建 子分类→一级分类 映射
+function buildCategoryToTopLevelMap(cats) {
+  const catById = {}
+  ;(cats || []).forEach(c => { catById[c.id] = c })
+  function getTop(cat) {
+    if (!cat.parent_id) return cat
+    const parent = catById[cat.parent_id]
+    return parent ? getTop(parent) : cat
+  }
+  const map = {}
+  ;(cats || []).forEach(c => {
+    const top = getTop(c)
+    map[c.name] = { topName: top.name, topIcon: top.icon || '' }
+  })
+  return map
+}
+
 Page({
   data: {
     loading: true,
+    isGuest: true,
+    user: null,
     pieSize: 140,  // rpx -> px 换算（140rpx ≈ 70px，在2.6.1版本canvas宽高用px）
     incomeColors: INCOME_COLORS,
     paymentColors: PAYMENT_COLORS,
     timeRange: 'month',
+    statMode: 'detail',  // detail=小类统计 summary=大类汇总
     totalIncome: '0.00', totalExpense: '0.00', balance: '0.00', balanceNum: 0,
     expenseBreakdown: [],
     incomeBreakdown: [],
+    paymentBreakdown: [],
+    filteredExpenseList: null,
+    filteredIncomeList: null,
+    filteredPaymentList: null,
     dailyTrend: [],
     expenseCats: [],
     budgetStatus: [],
@@ -47,12 +72,15 @@ Page({
 
   onLoad() {
     const now = new Date()
+    const user = app.globalData.user
     this.setData({
+      isGuest: !user,
+      user: user || null,
       year: now.getFullYear(),
       month: now.getMonth() + 1,
       monthLabel: `${now.getFullYear()}年${now.getMonth()+1}月`
     })
-    this.loadData()
+    if (user) this.loadData()
   },
 
   onShow() {
@@ -148,11 +176,44 @@ Page({
 
   // 筛选相关
   onSearchInput(e) {
-    this.setData({ searchCat: e.detail.value })
+    const searchCat = e && e.detail && e.detail.value || ''
+    this.setData({ searchCat })
+    // 防抖：等用户停止输入300ms后再过滤
+    if (this._searchTimer) clearTimeout(this._searchTimer)
+    this._searchTimer = setTimeout(() => this.applySearchFilter(), 300)
+  },
+
+  // 键盘确认（搜索键）立即触发过滤，解决中文输入法拼音组合期间匹配失败问题
+  onSearchConfirm() {
+    if (this._searchTimer) clearTimeout(this._searchTimer)
+    this.applySearchFilter()
+  },
+
+  applySearchFilter() {
+    const { searchCat, expenseBreakdown = [], incomeBreakdown = [], paymentBreakdown = [] } = this.data
+    const sc = (searchCat || '').trim()
+    if (!sc) {
+      this.setData({ filteredExpenseList: null, filteredIncomeList: null, filteredPaymentList: null })
+      return
+    }
+    const lower = sc.toLowerCase()
+    const filteredExpenseList = expenseBreakdown.filter(e => e && e.category && e.category.toLowerCase().includes(lower))
+    const filteredIncomeList = incomeBreakdown.filter(e => e && e.category && e.category.toLowerCase().includes(lower))
+    const filteredPaymentList = paymentBreakdown.filter(e => e && ((e.method && e.method.toLowerCase().includes(lower)) || (e.label && e.label.toLowerCase().includes(lower))))
+    this.setData({ filteredExpenseList, filteredIncomeList, filteredPaymentList })
   },
 
   clearSearch() {
-    this.setData({ searchCat: '', catFilter: '' })
+    if (this._searchTimer) clearTimeout(this._searchTimer)
+    this.setData({ searchCat: '', catFilter: '', filteredExpenseList: null, filteredIncomeList: null, filteredPaymentList: null })
+    this.loadData()
+  },
+
+  switchStatMode(e) {
+    const mode = e.currentTarget.dataset.mode
+    console.log('[switchStatMode] clicked mode=', mode, 'current=', this.data.statMode)
+    if (mode === this.data.statMode) return
+    this.setData({ statMode: mode })
     this.loadData()
   },
 
@@ -206,25 +267,71 @@ Page({
     all.forEach(t => catSet.add(t.category))
     const allCategories = Array.from(catSet)
 
+    // 获取该账本的类别（含自定义 + 默认）
+    const { data: cats } = await supabase.from('categories')
+      .select('*').eq('ledger_id', currentLedger.id)
+
     // 支出分类统计
     const expMap = {}
-    expense.forEach(t => {
-      const key = t.category || '其他'
-      expMap[key] = (expMap[key]||0) + Number(t.amount)
-    })
+    const expenseSubMap = {}
+    const useSummary = this.data.statMode === 'summary'
+    console.log('[loadData] statMode=', this.data.statMode, 'useSummary=', useSummary)
+    if (useSummary) {
+      const catMap = buildCategoryToTopLevelMap((cats || []).filter(c => c.type === 'expense'))
+      expense.forEach(t => {
+        const key = t.category || '其他'
+        const mapped = catMap[key]
+        const topKey = mapped ? mapped.topName : key
+        expMap[topKey] = (expMap[topKey]||0) + Number(t.amount)
+        if (!expenseSubMap[topKey]) expenseSubMap[topKey] = {}
+        expenseSubMap[topKey][key] = (expenseSubMap[topKey][key]||0) + Number(t.amount)
+      })
+    } else {
+      expense.forEach(t => {
+        const key = t.category || '其他'
+        expMap[key] = (expMap[key]||0) + Number(t.amount)
+      })
+    }
     const expenseBreakdown = Object.entries(expMap)
       .sort((a,b)=>b[1]-a[1])
       .map(([category, amount], i) => {
         const preset = DEFAULT_EXPENSE_CATEGORIES.find(c=>c.name===category)
         return { category, icon: preset ? preset.icon : '📌', amount: amount.toFixed(2), percent: totalExpense ? Math.round(amount/totalExpense*100) : 0, color: COLORS[i%COLORS.length] }
       })
+    // 汇总模式下，给每个顶级类别加上子类目明细
+    if (useSummary) {
+      expenseBreakdown.forEach(item => {
+        const subs = expenseSubMap[item.category] || {}
+        item.subItems = Object.entries(subs)
+          .sort((a,b)=>b[1]-a[1])
+          .map(([subCat, subAmt]) => {
+            const preset = DEFAULT_EXPENSE_CATEGORIES.find(c=>c.name===subCat)
+            return {
+              category: subCat,
+              icon: preset ? preset.icon : '📌',
+              amount: subAmt.toFixed(2),
+              percent: item.amount > 0 ? Math.round(subAmt/Number(item.amount)*100) : 0
+            }
+          })
+      })
+    }
 
     // 收入分类统计
     const incMap = {}
-    income.forEach(t => {
-      const key = t.category || '其他'
-      incMap[key] = (incMap[key]||0) + Number(t.amount)
-    })
+    if (useSummary) {
+      const catMap = buildCategoryToTopLevelMap((cats || []).filter(c => c.type === 'income'))
+      income.forEach(t => {
+        const key = t.category || '其他'
+        const mapped = catMap[key]
+        const topKey = mapped ? mapped.topName : key
+        incMap[topKey] = (incMap[topKey]||0) + Number(t.amount)
+      })
+    } else {
+      income.forEach(t => {
+        const key = t.category || '其他'
+        incMap[key] = (incMap[key]||0) + Number(t.amount)
+      })
+    }
     const incomeBreakdown = Object.entries(incMap)
       .sort((a,b)=>b[1]-a[1])
       .map(([category, amount], i) => {
@@ -232,16 +339,13 @@ Page({
         return { category, icon: preset ? preset.icon : '💰', amount: amount.toFixed(2), percent: totalIncome ? Math.round(amount/totalIncome*100) : 0, index: i }
       })
 
-    // 搜索过滤（仅影响列表，不影响饼图）
-    const { searchCat } = this.data
-    const filteredExpenses = searchCat ? expenseBreakdown.filter(e => e.category.includes(searchCat)) : null
     // 每日支出趋势
     const dayMap = {}
     expense.forEach(t => {
       const d = t.date
       dayMap[d] = (dayMap[d]||0) + Number(t.amount)
     })
-    const today = new Date().toISOString().split('T')[0]
+    const today = (() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().split('T')[0] })()
     const days = Object.keys(dayMap).sort().slice(-15)
     const maxDayAmt = Math.max(...days.map(d=>dayMap[d]), 1)
     const dailyTrend = days.map(d => ({
@@ -299,21 +403,24 @@ Page({
         index: i
       }))
 
+    // 先写入全量数据，再走统一的 applySearchFilter 过滤
     this.setData({
       loading: false,
       totalIncome: totalIncome.toFixed(2),
       totalExpense: totalExpense.toFixed(2),
       balance: balanceNum.toFixed(2),
       balanceNum,
-      expenseBreakdown: expenseBreakdown,     // 全部数据（饼图+图例）
-      filteredExpenseList: filteredExpenses, // 搜索过滤后的列表（无搜索时为null）
+      expenseBreakdown: expenseBreakdown,
       incomeBreakdown: incomeBreakdown,
       dailyTrend,
-      incomeTrend,  // 收入趋势
+      incomeTrend,
       expenseCats,
       budgetStatus,
       allCategories,
       paymentBreakdown,
+    }, () => {
+      // setData 回调中执行搜索过滤，此时 this.data 已是最新
+      this.applySearchFilter()
     })
   },
 
@@ -348,5 +455,9 @@ Page({
     } finally {
       this.setData({ budgetSaving: false })
     }
+  },
+
+  goLogin() {
+    wx.navigateTo({ url: '/pages/login/login' })
   },
 })

@@ -107,15 +107,15 @@ Page({
       ])
 
       const backup = {
-        version: "3.0.3", app: '游游记账',
-        exportedAt: new Date().toISOString(),
+        version: "5.1.1", app: '游游记账',
+        exportedAt: new Date(Date.now() + 8*3600000).toISOString(),
         ledgerName: this.data.currentLedger.name,
         transactions: txRes.data || [],
         categories: catRes.data || [],
         budgets: budRes.data || [],
       }
       const jsonStr = JSON.stringify(backup, null, 2)
-      const fileName = `游游记账_备份_${new Date().toISOString().slice(0,10)}.json`
+      const fileName = `游游记账_备份_${(() => { const d = new Date(Date.now() + 8*3600000); return d.toISOString().slice(0,10) })()}.json`
 
       const fs = wx.getFileSystemManager()
       const filePath = wx.env.USER_DATA_PATH + '/' + fileName
@@ -225,7 +225,7 @@ Page({
         const toInsert = txs.map(t => ({
           id: t.id, ledger_id: ledger.id, date: t.date, type: t.type,
           category: t.category, amount: t.amount, note: t.note || '',
-          payment_method: t.payment_method || null, created_at: t.created_at || new Date().toISOString()
+          payment_method: t.payment_method || null, created_at: t.created_at || new Date(Date.now() + 8*3600000).toISOString()
         }))
         await supabase.from('transactions').upsert(toInsert, { onConflict: 'id' })
         ok += txs.length

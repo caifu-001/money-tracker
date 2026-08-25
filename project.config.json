@@ -43,7 +43,7 @@
     "disableSWC": true
   },
   "compileType": "miniprogram",
-  "libVersion": "3.4.3",
+  "libVersion": "4.1.3",
   "appid": "wx30ef5296dd2cd8f7",
   "projectname": "money-tracker-miniapp",
   "condition": {},

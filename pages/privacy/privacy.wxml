@@ -4,7 +4,7 @@
       <view class="header-circle header-circle1"></view>
       <view class="header-circle header-circle2"></view>
       <text class="header-title">隐私政策</text>
-      <text class="header-sub">Version 4.0.1 · 2026年4月</text>
+      <text class="header-sub">Version 5.1.1 · 2026年7月</text>
     </view>
     <view class="content-card">
       <view class="section">
@@ -37,13 +37,8 @@
     </view>
   </scroll-view>
 
-  <!-- 未滚到底部 -->
-  <view class="bottom-bar" wx:if="{{!reachedBottom}}">
-    <text class="bottom-hint">📜 请向上滚动完整阅读隐私政策</text>
-  </view>
-
-  <!-- 滚到底部后可确认 -->
-  <view class="bottom-bar" wx:if="{{reachedBottom}}">
-    <view class="confirm-btn" bindtap="handleConfirm">已阅读并同意隐私政策</view>
+  <!-- 底部返回按钮 -->
+  <view class="bottom-bar">
+    <view class="confirm-btn" bindtap="goBack">返回</view>
   </view>
 </view>
