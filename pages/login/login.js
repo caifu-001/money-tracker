@@ -137,6 +137,10 @@ Page({
           wx.showToast({ title: '账号已被禁用', icon: 'none' })
           return
         }
+        if (userData.status === 'deleted') {
+          wx.showToast({ title: '账号已被删除', icon: 'none' })
+          return
+        }
         // 自动登录成功
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
         console.log('[tryWechatLogin] 微信登录成功，准备更新 last_login，用户ID:', user.id)
@@ -433,6 +437,9 @@ Page({
       } else if (userData.status === 'disabled') {
         await supabase.auth.signOut()
         throw new Error('账号已被禁用，请联系管理员')
+      } else if (userData.status === 'deleted') {
+        await supabase.auth.signOut()
+        throw new Error('账号已被删除，请联系管理员')
       }
 
       const user = { id: data.user.id, email: data.user.email, name: (userData && userData.name) || loginId, role: (userData && userData.role) || 'user' }

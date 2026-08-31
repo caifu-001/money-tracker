@@ -195,6 +195,7 @@ page { background: #f0f2f7; }
 .activity-badge.active   { background: #dbeafe; color: #2563eb; }
 .activity-badge.normal   { background: #fef3c7; color: #d97706; }
 .activity-badge.inactive { background: #ffedd5; color: #ea580c; }
+.activity-badge.deleted   { background: #f3f4f6; color: #9ca3af; }
 .activity-badge.zombie   { background: #f3f4f6; color: #9ca3af; }
 /* 第二行：邮箱 + 角色 */
 .user-row2 {
@@ -219,6 +220,7 @@ page { background: #f0f2f7; }
 .action-btn.approve { background: #d1fae5; color: #059669; }
 .action-btn.disable { background: #fef3c7; color: #d97706; }
 .action-btn.enable { background: #dbeafe; color: #2563eb; }
+.action-btn.restore { background: #ede9fe; color: #7c3aed; }
 .action-btn.delete { background: #fee2e2; color: #ef4444; }
 
 /* 按钮 */

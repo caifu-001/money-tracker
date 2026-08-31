@@ -13,14 +13,15 @@
     <text class="header-title">数据分析</text>
   </view>
   <view class="month-nav-card">
-    <view class="month-btn" bindtap="prevMonth"><text>‹</text></view>
+    <view class="month-btn" wx:if="{{timeRange!=='all'}}" bindtap="prevMonth"><text>‹</text></view>
     <text class="month-label">{{monthLabel}}</text>
-    <view class="month-btn" bindtap="nextMonth"><text>›</text></view>
+    <view class="month-btn" wx:if="{{timeRange!=='all'}}" bindtap="nextMonth"><text>›</text></view>
   </view>
   <view class="time-tabs">
     <view class="time-tab {{timeRange==='month'?'active':''}}" bindtap="setTime" data-range="month"><text>本月</text></view>
     <view class="time-tab {{timeRange==='quarter'?'active':''}}" bindtap="setTime" data-range="quarter"><text>本季</text></view>
     <view class="time-tab {{timeRange==='year'?'active':''}}" bindtap="setTime" data-range="year"><text>本年</text></view>
+    <view class="time-tab {{timeRange==='all'?'active':''}}" bindtap="setTime" data-range="all"><text>全部</text></view>
     <view class="time-tab {{timeRange==='custom'?'active':''}}" bindtap="setTime" data-range="custom"><text>自定义</text></view>
   </view>
   <view class="date-range-card" wx:if="{{timeRange==='custom'}}">
@@ -150,11 +151,11 @@
       <view class="breakdown-section" wx:if="{{expenseBreakdown.length > 0}}">
         <text class="breakdown-title expense">💸 支出明细</text>
         <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{expenseBreakdown}}" wx:key="category">
+          <view class="breakdown-item" wx:for="{{expenseBreakdown}}" wx:key="category" bindtap="openCategoryDetail" data-cat="{{item.category}}" data-type="expense">
             <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
             <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
             <view class="sub-items" wx:if="{{item.subItems && item.subItems.length}}">
-              <view class="sub-item" wx:for="{{item.subItems}}" wx:for-item="sub" wx:key="category">
+              <view class="sub-item" wx:for="{{item.subItems}}" wx:for-item="sub" wx:key="category" catchtap="openCategoryDetail" data-cat="{{sub.category}}" data-type="expense">
                 <text class="sub-icon">{{sub.icon}}</text>
                 <text class="sub-name">{{sub.category}}</text>
                 <view class="sub-right">
@@ -203,7 +204,7 @@
       <view class="breakdown-section" wx:if="{{incomeBreakdown.length > 0}}">
         <text class="breakdown-title income">💰 收入明细</text>
         <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{incomeBreakdown}}" wx:key="category">
+          <view class="breakdown-item" wx:for="{{incomeBreakdown}}" wx:key="category" bindtap="openCategoryDetail" data-cat="{{item.category}}" data-type="income">
             <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
             <view class="bi-right"><text class="bi-amount income">+¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
           </view>
@@ -236,7 +237,7 @@
       <view class="breakdown-section" wx:if="{{paymentBreakdown.length > 0}}">
         <text class="breakdown-title">💳 支付明细</text>
         <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{paymentBreakdown}}" wx:key="method">
+          <view class="breakdown-item" wx:for="{{paymentBreakdown}}" wx:key="method" bindtap="openCategoryDetail" data-method="{{item.method}}" data-type="payment">
             <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.label}}</text></view>
             <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
           </view>
@@ -247,5 +248,30 @@
       </view>
     </view>
 
+  </view>
+
+  <!-- 分类明细账单弹窗 -->
+  <view class="detail-mask" wx:if="{{showDetail}}" bindtap="closeDetail"></view>
+  <view class="detail-sheet {{showDetail?'show':''}}">
+    <view class="detail-header">
+      <text class="detail-title">{{detailTitle}}</text>
+      <view class="detail-close" bindtap="closeDetail"><text>✕</text></view>
+    </view>
+    <scroll-view class="detail-body" scroll-y>
+      <view class="detail-item" wx:for="{{detailList}}" wx:key="id" bindtap="editTransaction" data-id="{{item.id}}">
+        <view class="detail-item-left">
+          <text class="detail-item-date">{{item.date}}</text>
+          <text class="detail-item-note" wx:if="{{item.note}}">{{item.note}}</text>
+        </view>
+        <view class="detail-item-right">
+          <text class="detail-item-amount {{item.type==='expense'?'expense':'income'}}">{{item.type==='expense'?'-':'+'}}¥{{item.amount}}</text>
+          <text class="detail-item-pay">{{item.paymentDisplay}}</text>
+        </view>
+        <text class="detail-item-arrow">›</text>
+      </view>
+      <view class="detail-empty" wx:if="{{detailList.length===0}}">
+        <text>暂无账单</text>
+      </view>
+    </scroll-view>
   </view>
 </view>

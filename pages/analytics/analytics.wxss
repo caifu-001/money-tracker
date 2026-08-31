@@ -134,3 +134,24 @@
 .empty-text { font-size: 28rpx; color: #9ca3af; }
 .loading { display: flex; align-items: center; justify-content: center; padding: 120rpx 0; }
 .loading-text { font-size: 28rpx; color: #9ca3af; }
+
+/* ── 分类明细账单弹窗 ── */
+.detail-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; }
+.detail-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 32rpx 32rpx 0 0; z-index: 101; transform: translateY(100%); transition: transform 0.25s ease; max-height: 75vh; display: flex; flex-direction: column; }
+.detail-sheet.show { transform: translateY(0); }
+.detail-header { display: flex; align-items: center; justify-content: space-between; padding: 32rpx 32rpx 20rpx; border-bottom: 1rpx solid #f3f4f6; }
+.detail-title { font-size: 32rpx; font-weight: 700; color: #1f2937; }
+.detail-close { width: 56rpx; height: 56rpx; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 32rpx; }
+.detail-body { flex: 1; overflow-y: auto; padding: 8rpx 32rpx 40rpx; }
+.detail-item { display: flex; align-items: center; padding: 24rpx 0; border-bottom: 1rpx solid #f3f4f6; }
+.detail-item:last-child { border-bottom: none; }
+.detail-item-left { flex: 1; display: flex; flex-direction: column; gap: 8rpx; min-width: 0; }
+.detail-item-date { font-size: 26rpx; color: #6b7280; }
+.detail-item-note { font-size: 24rpx; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6rpx; }
+.detail-item-amount { font-size: 30rpx; font-weight: 800; }
+.detail-item-amount.expense { color: #ef4444; }
+.detail-item-amount.income { color: #22c55e; }
+.detail-item-pay { font-size: 22rpx; color: #9ca3af; }
+.detail-item-arrow { margin-left: 16rpx; color: #d1d5db; font-size: 36rpx; }
+.detail-empty { text-align: center; padding: 80rpx 0; color: #9ca3af; font-size: 28rpx; }

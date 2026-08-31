@@ -1,7 +1,20 @@
 ﻿// pages/admin/admin.js
 const app = getApp()
-const { supabase } = require('../../utils/supabase')
+const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } = require('../../utils/supabase')
 const { initDefaultCategories } = require('../../utils/categories')
+
+// 北京时间格式化：数据库存 UTC，展示统一 +8
+// 返回 { date: 'YYYY-MM-DD', datetime: 'YYYY-MM-DD HH:mm' }
+function fmtBJ(isoStr) {
+  if (!isoStr) return { date: '--', datetime: '--' }
+  const d = new Date(isoStr)
+  if (isNaN(d.getTime())) return { date: '--', datetime: '--' }
+  const bj = new Date(d.getTime() + 8 * 3600000)
+  const pad = n => String(n).padStart(2, '0')
+  const date = `${bj.getUTCFullYear()}-${pad(bj.getUTCMonth() + 1)}-${pad(bj.getUTCDate())}`
+  const datetime = `${date} ${pad(bj.getUTCHours())}:${pad(bj.getUTCMinutes())}`
+  return { date, datetime }
+}
 
 Page({
   data: {
@@ -239,8 +252,8 @@ Page({
           roleClass: roleClassMap[user.role] || 'role-user',
           status: profile?.status || user.status || 'active',
           statusName: statusMap[profile?.status || user.status] || '--',
-          createdDate: profile?.created_at ? profile.created_at.slice(0, 10) : '--',
-          loginDate: profile?.last_login ? profile.last_login.slice(0, 16).replace('T', ' ') : '--',
+          createdDate: fmtBJ(profile?.created_at).date,
+          loginDate: fmtBJ(profile?.last_login).datetime,
           ledgerCount: ledgerCount,
         }
       })
@@ -250,7 +263,9 @@ Page({
   },
 
   async loadUsers() {
-    const { data, error } = await supabase.from('users').select('id,name,email,role,status,created_at,last_login').order('created_at', { ascending: false })
+    // 懒触发：清理已删除超 15 天的用户（不阻塞列表渲染，fire-and-forget）
+    this._purgeDeletedUsersLazy()
+    const { data, error } = await supabase.from('users').select('id,name,email,role,status,created_at,last_login,deleted_at')
     if (error) { console.error('loadUsers error:', error); wx.showToast({ title: '加载用户失败:' + error.message, icon: 'none', duration: 3000 }); return }
     console.log('[loadUsers] users count:', data?.length || 0)
     if (data?.[0]) {
@@ -260,12 +275,26 @@ Page({
       console.log('[loadUsers] first user status:', data[0].status)
       console.log('[loadUsers] first user role:', data[0].role)
     }
+    // 按最后登录时间倒序（越新越靠前）；从未登录（last_login 为空）排最后
+    // tiebreaker：登录时间相同（含都为 null）时，按注册时间倒序，保证排序稳定
+    const sorted = (data || []).slice().sort((a, b) => {
+      const ta = a.last_login ? new Date(a.last_login).getTime() : -Infinity
+      const tb = b.last_login ? new Date(b.last_login).getTime() : -Infinity
+      if (tb !== ta) return tb - ta
+      const ca = a.created_at ? new Date(a.created_at).getTime() : -Infinity
+      const cb = b.created_at ? new Date(b.created_at).getTime() : -Infinity
+      return cb - ca
+    })
     // 计算活跃度 + 预处理日期格式
     const now = Date.now()
-    const withActivity = (data || []).map(u => {
+    const withActivity = sorted.map(u => {
       let activity = '从未登录'
       let activityClass = 'zombie'
-      if (u.last_login) {
+      if (u.status === 'deleted') {
+        // 已删除账户：活跃度位置改为显示剩余保留天数
+        activity = '已删除'
+        activityClass = 'deleted'
+      } else if (u.last_login) {
         const diff = now - new Date(u.last_login).getTime()
         const days = Math.floor(diff / 86400000)
         if (days <= 7)  { activity = '在线';    activityClass = 'online' }
@@ -274,10 +303,16 @@ Page({
         else if (days <= 180){ activity = '不活跃'; activityClass = 'inactive' }
         else               { activity = '僵尸';   activityClass = 'zombie' }
       }
-      // 预处理日期格式（WXML 不支持 .slice() 方法调用）
-      const createdDate = u.created_at ? u.created_at.slice(0, 10) : '--'
-      const loginDate = u.last_login ? u.last_login.slice(0, 16).replace('T', ' ') : '--'
-      return { ...u, activity, activityClass, createdDate, loginDate }
+      // 预处理日期格式（WXML 不支持 .slice() 方法调用）；统一北京时间
+      const createdDate = fmtBJ(u.created_at).date
+      const loginDate = fmtBJ(u.last_login).datetime
+      // 已删除账户：计算剩余保留天数（15天内可恢复）
+      let remainDays = null
+      if (u.status === 'deleted' && u.deleted_at) {
+        const elapsed = Math.floor((now - new Date(u.deleted_at).getTime()) / 86400000)
+        remainDays = Math.max(0, 15 - elapsed)
+      }
+      return { ...u, activity, activityClass, createdDate, loginDate, remainDays }
     })
     console.log('[loadUsers] setting users:', withActivity.length)
     if (withActivity[0]) {
@@ -400,40 +435,112 @@ Page({
     wx.showToast({ title: newVal ? '已开启自动审核' : '已关闭自动审核', icon: 'success' })
   },
 
+  // 调用后端 SECURITY DEFINER RPC（内部做最终权限校验，前端被绕过也无法越权）
+  _callAdminRpc(fnName, params) {
+    return new Promise((resolve) => {
+      wx.request({
+        url: SUPABASE_URL + '/rest/v1/rpc/' + fnName,
+        method: 'POST',
+        data: params,
+        header: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + (wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY),
+        },
+        success: r => resolve(r),
+        fail: e => resolve({ statusCode: 0, data: { error: '网络异常' } })
+      })
+    })
+  },
+
+  // 用户操作权限守卫：禁止操作自己；默认禁止操作管理员（仅普通用户可被降权/删除）
+  // opts.forbidAdmin=false 时允许操作管理员（用于恢复类操作：启用/通过）
+  _guardUserOp(userId, action, opts = {}) {
+    const { user, users } = this.data
+    if (user && userId === user.id) {
+      return `不能${action}自己的账户`
+    }
+    const target = (users || []).find(u => u.id === userId)
+    if (!target) {
+      return '用户不存在'
+    }
+    if (opts.forbidAdmin !== false && target.role !== 'user') {
+      return `不能${action}管理员账户`
+    }
+    return null
+  },
+
+  // 懒触发：清理已删除超 15 天的用户（不阻塞，失败静默）
+  async _purgeDeletedUsersLazy() {
+    try {
+      const res = await this._callAdminRpc('admin_purge_deleted_users', {})
+      if (res.statusCode < 400 && res.data != null) {
+        console.log('[purge] 已清理过期账户数:', res.data)
+      }
+    } catch (e) {
+      console.log('[purge] 清理调用失败（忽略）:', e)
+    }
+  },
+
   async handleApproveUser(e) {
     const userId = e.currentTarget.dataset.id
-    const { error } = await supabase.from('users').update({ status: 'active' }).eq('id', userId)
-    if (error) return wx.showToast({ title: error.message || '操作失败', icon: 'none' })
+    const err = this._guardUserOp(userId, '通过', { forbidAdmin: false })
+    if (err) return wx.showToast({ title: err, icon: 'none' })
+    const res = await this._callAdminRpc('admin_set_user_status', { p_target_id: userId, p_status: 'active' })
+    if (res.statusCode >= 400) return wx.showToast({ title: (res.data && res.data.message) || '操作失败', icon: 'none' })
     wx.showToast({ title: '已通过', icon: 'success' })
     this.loadUsers()
   },
 
   async handleDisableUser(e) {
     const userId = e.currentTarget.dataset.id
-    const { error } = await supabase.from('users').update({ status: 'disabled' }).eq('id', userId)
-    if (error) return wx.showToast({ title: error.message || '操作失败', icon: 'none' })
+    const err = this._guardUserOp(userId, '禁用')
+    if (err) return wx.showToast({ title: err, icon: 'none' })
+    const res = await this._callAdminRpc('admin_set_user_status', { p_target_id: userId, p_status: 'disabled' })
+    if (res.statusCode >= 400) return wx.showToast({ title: (res.data && res.data.message) || '操作失败', icon: 'none' })
     wx.showToast({ title: '已禁用', icon: 'success' })
     this.loadUsers()
   },
 
   async handleEnableUser(e) {
     const userId = e.currentTarget.dataset.id
-    const { error } = await supabase.from('users').update({ status: 'active' }).eq('id', userId)
-    if (error) return wx.showToast({ title: error.message || '操作失败', icon: 'none' })
+    const err = this._guardUserOp(userId, '启用', { forbidAdmin: false })
+    if (err) return wx.showToast({ title: err, icon: 'none' })
+    const res = await this._callAdminRpc('admin_set_user_status', { p_target_id: userId, p_status: 'active' })
+    if (res.statusCode >= 400) return wx.showToast({ title: (res.data && res.data.message) || '操作失败', icon: 'none' })
     wx.showToast({ title: '已启用', icon: 'success' })
     this.loadUsers()
   },
 
   async handleDeleteUser(e) {
     const userId = e.currentTarget.dataset.id
+    const err = this._guardUserOp(userId, '删除')
+    if (err) return wx.showToast({ title: err, icon: 'none' })
     wx.showModal({
       title: '确认删除',
-      content: '删除用户后其数据将无法恢复，确定删除吗？',
+      content: '删除后账户数据将保留 15 天，期间可恢复；15 天后永久清除。确定删除吗？',
       success: async (res) => {
         if (!res.confirm) return
-        const { error } = await supabase.from('users').delete().eq('id', userId)
-        if (error) return wx.showToast({ title: error.message || '删除失败', icon: 'none' })
-        wx.showToast({ title: '已删除', icon: 'success' })
+        const rpcRes = await this._callAdminRpc('admin_soft_delete_user', { p_target_id: userId })
+        if (rpcRes.statusCode >= 400) return wx.showToast({ title: (rpcRes.data && rpcRes.data.message) || '删除失败', icon: 'none' })
+        wx.showToast({ title: '已删除（15天内可恢复）', icon: 'success' })
+        this.loadUsers()
+      }
+    })
+  },
+
+  async handleRestoreUser(e) {
+    const userId = e.currentTarget.dataset.id
+    const err = this._guardUserOp(userId, '恢复', { forbidAdmin: false })
+    if (err) return wx.showToast({ title: err, icon: 'none' })
+    wx.showModal({
+      title: '确认恢复',
+      content: '恢复后该账户将重新启用，确定恢复吗？',
+      success: async (res) => {
+        if (!res.confirm) return
+        const rpcRes = await this._callAdminRpc('admin_restore_user', { p_target_id: userId })
+        if (rpcRes.statusCode >= 400) return wx.showToast({ title: (rpcRes.data && rpcRes.data.message) || '恢复失败', icon: 'none' })
+        wx.showToast({ title: '已恢复', icon: 'success' })
         this.loadUsers()
       }
     })

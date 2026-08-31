@@ -68,6 +68,11 @@ Page({
     showDateRange: false,
     customStartDate: '',
     customEndDate: '',
+    // 分类明细账单弹窗
+    showDetail: false,
+    detailTitle: '',
+    detailType: '',   // expense | income | payment
+    detailList: [],
   },
 
   onLoad() {
@@ -102,6 +107,9 @@ Page({
     const range = e.currentTarget.dataset.range
     if (range === 'custom') {
       this.setData({ timeRange: 'custom', showDateRange: true })
+    } else if (range === 'all') {
+      this.setData({ timeRange: 'all', showDateRange: false, monthLabel: '全部时间' })
+      this.loadData()
     } else {
       this.setData({ timeRange: range, showDateRange: false })
       this.loadData()
@@ -155,7 +163,10 @@ Page({
     const { year, month, timeRange, customStartDate, customEndDate } = this.data
     const now = new Date()
     let start, end
-    if (timeRange === 'custom') {
+    if (timeRange === 'all') {
+      // 全部：不加日期过滤
+      return { start: null, end: null }
+    } else if (timeRange === 'custom') {
       start = customStartDate
       end = customEndDate
     } else if (timeRange === 'month') {
@@ -168,6 +179,7 @@ Page({
       const lastDay = new Date(year, q*3+3, 0).getDate()
       end = `${year}-${String(q*3+3).padStart(2,'0')}-${lastDay}`
     } else {
+      // year
       start = `${year}-01-01`
       end = `${year}-12-31`
     }
@@ -227,6 +239,83 @@ Page({
     this.loadData()
   },
 
+  // ── 分类明细账单弹窗 ──
+  // 点击分类项，展示该分类（或支付方式）下的详细账单列表
+  openCategoryDetail(e) {
+    const { cat, type } = e.currentTarget.dataset
+    const all = this._allTx || []
+    let list = []
+    let title = ''
+    if (type === 'payment') {
+      const method = e.currentTarget.dataset.method
+      list = all.filter(t => t.type === 'expense' && (t.payment_method || 'other') === method)
+      const PM_MAP = { cash:'💵 现金', wechat:'💚 微信', alipay:'💙 支付宝', bankcard:'💳 银行卡', other:'💠 其他' }
+      title = (PM_MAP[method] || method) + ' 账单'
+    } else {
+      // expense | income：按类名过滤
+      // 大类（summary）模式下，把大类展开成所有后代叶子类名，避免漏掉子类流水
+      const names = this._expandCategoryNames(cat, type)
+      list = all.filter(t => t.type === type && names.has(t.category))
+      title = cat + ' 账单'
+    }
+    // 按日期降序排列
+    list = list.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    const PM_DISPLAY = { cash:'现金', wechat:'微信', alipay:'支付宝', bankcard:'银行卡', other:'其他' }
+    const detailList = list.map(t => ({
+      id: t.id,
+      amount: Number(t.amount).toFixed(2),
+      type: t.type,
+      date: t.date,
+      note: t.note || '',
+      paymentDisplay: PM_DISPLAY[t.payment_method] || '其他',
+    }))
+    this.setData({
+      showDetail: true,
+      detailTitle: title,
+      detailType: type,
+      detailList,
+    })
+  },
+
+  // 展开某类名为其自身 + 所有后代叶子类名（用于大类点击时覆盖全部子类流水）
+  _expandCategoryNames(cat, type) {
+    const cats = this._cats || []
+    const names = new Set()
+    names.add(cat)
+    const catById = {}
+    cats.forEach(c => { catById[c.id] = c })
+    // 找到该类名对应的分类节点（可能有同名，取第一个匹配 type 的）
+    const node = cats.find(c => c.name === cat && c.type === type)
+    if (node) {
+      // BFS 收集所有后代名称
+      const queue = [node.id]
+      while (queue.length) {
+        const id = queue.shift()
+        const children = cats.filter(c => c.parent_id === id)
+        children.forEach(ch => {
+          names.add(ch.name)
+          queue.push(ch.id)
+        })
+      }
+    }
+    return names
+  },
+
+  closeDetail() {
+    this.setData({ showDetail: false })
+  },
+
+  // 点击账单跳转 home 页编辑
+  editTransaction(e) {
+    const id = e.currentTarget.dataset.id
+    const all = this._allTx || []
+    const tx = all.find(t => t.id === id)
+    // 通过 globalData 传递待编辑账单 id + 日期，switchTab 到 home
+    app.globalData.pendingEditTxId = id
+    app.globalData.pendingEditTxDate = tx ? tx.date : ''
+    wx.switchTab({ url: '/pages/home/home' })
+  },
+
   async loadData() {
     const { currentLedger, user } = app.globalData
     const { year, month, timeRange } = this.data
@@ -244,8 +333,12 @@ Page({
     this.setData({ loading: true })
     const { catFilter } = this.data
 
-    let q = supabase.from('transactions').select('amount,type,category,date,user_id,payment_method')
-      .eq('ledger_id', currentLedger.id).gte('date', start).lte('date', end).order('date')
+    let q = supabase.from('transactions').select('id,amount,type,category,date,user_id,payment_method,note')
+      .eq('ledger_id', currentLedger.id).order('date')
+    // 非「全部」时才加日期范围过滤
+    if (start && end) {
+      q = q.gte('date', start).lte('date', end)
+    }
     
     // 类别筛选
     if (catFilter) {
@@ -255,6 +348,8 @@ Page({
     const { data: txs } = await q
 
     const all = txs || []
+    // 缓存完整流水列表，供分类明细弹窗过滤
+    this._allTx = all
     const income  = all.filter(t => t.type === 'income')
     const expense = all.filter(t => t.type === 'expense')
 
@@ -270,6 +365,7 @@ Page({
     // 获取该账本的类别（含自定义 + 默认）
     const { data: cats } = await supabase.from('categories')
       .select('*').eq('ledger_id', currentLedger.id)
+    this._cats = cats || []
 
     // 支出分类统计
     const expMap = {}
@@ -369,9 +465,14 @@ Page({
     }))
 
     // 支出类别 + 是否已有预算（year, month 已在函数开头声明）
-    const { data: budgets } = await supabase.from('budgets')
-      .select('category,amount')
-      .eq('ledger_id', currentLedger.id).eq('year',year).eq('month',month)
+    // 「全部」时间范围下，预算不按当前年月过滤，取该账本全部预算
+    let budgetQuery = supabase.from('budgets')
+      .select('category,amount,year,month')
+      .eq('ledger_id', currentLedger.id)
+    if (timeRange !== 'all') {
+      budgetQuery = budgetQuery.eq('year', year).eq('month', month)
+    }
+    const { data: budgets } = await budgetQuery
     const budgetMap = {}
     ;(budgets||[]).forEach(b => { budgetMap[b.category] = Number(b.amount) })
 

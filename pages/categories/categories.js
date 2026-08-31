@@ -23,6 +23,11 @@ Page({
     addName: '',
     addIcon: '',
     addParentId: null,
+    // 移动弹窗
+    showMove: false,
+    moveCat: null,
+    moveTargets: [],
+    moveTargetId: null,
   },
 
   onLoad() {
@@ -199,14 +204,153 @@ Page({
     this.loadCategories()
   },
 
-  async handleDelete() {
-    const { editCat } = this.data
+  // ── 移动分类 ──
+  // 收集该分类自己及所有后代 id（防止移到自己的子节点下造成环）
+  _collectSubtreeIds(node, acc = []) {
+    acc.push(node.id)
+    if (node.children && node.children.length > 0) {
+      node.children.forEach(c => this._collectSubtreeIds(c, acc))
+    }
+    return acc
+  },
+
+  openMove(e) {
+    if (!this.data.user) {
+      wx.showModal({ title: '请先登录', content: '登录后即可管理分类', confirmText: '去登录', success: (r) => { if (r.confirm) this.goLogin() } })
+      return
+    }
+    const cat = e.currentTarget.dataset.cat
+    if (!cat) return
+    const forbidden = new Set(this._collectSubtreeIds(cat))
+    const type = cat.type
+
+    // 移动目标：同类型下所有节点，排除自己及后代，排除直接父节点（移到原位置无意义）
+    const all = type === 'expense' ? this.data.expenseCats : this.data.incomeCats
+    const targets = []
+    const walk = (nodes, depth) => {
+      nodes.forEach(n => {
+        if (forbidden.has(n.id)) return
+        if (n.id === cat.parent_id) { /* 跳过直接父节点，但继续遍历其子 */
+          if (n.children) walk(n.children, depth + 1)
+          return
+        }
+        targets.push({ id: n.id, name: n.name, depth })
+        if (n.children) walk(n.children, depth + 1)
+      })
+    }
+    walk(all, 0)
+    // 顶层移动目标（移到根级）
+    if (cat.parent_id) {
+      targets.unshift({ id: '', name: '（顶层 / 无父级）', depth: 0 })
+    }
+
+    this.setData({ showMove: true, moveCat: cat, moveTargets: targets, moveTargetId: '' })
+  },
+
+  closeMove() { this.setData({ showMove: false }) },
+
+  onMoveTargetTap(e) {
+    this.setData({ moveTargetId: e.currentTarget.dataset.id })
+  },
+
+  async handleMoveConfirm() {
+    const { moveCat, moveTargetId, currentLedger } = this.data
+    if (!moveCat) return
+    // moveTargetId === '' 表示移到根级；否则移到指定父级
+    const newParentId = moveTargetId === '' ? null : moveTargetId
+    // 移到当前位置（原父级）则无需操作
+    if ((newParentId || null) === (moveCat.parent_id || null)) {
+      return wx.showToast({ title: '未改变位置', icon: 'none' })
+    }
+    // 计算新层级
+    let newLevel = 1
+    if (newParentId) {
+      const parent = this._findNode(newParentId)
+      if (parent) newLevel = parent.level + 1
+    }
+    // 目标父级层级不能太深（最多4级）
+    if (newLevel > 4) {
+      return wx.showToast({ title: '最多支持4级分类', icon: 'none' })
+    }
+
+    // 提示：移动会导致该分类及其子分类的层级变化
+    const hasChildren = moveCat.children && moveCat.children.length > 0
     wx.showModal({
-      title: '确认删除',
-      content: '删除后无法恢复，确定删除该分类吗？',
+      title: '确认移动',
+      content: hasChildren
+        ? `将「${moveCat.name}」及其 ${moveCat.children.length} 个子分类一起移动，确定吗？`
+        : `确定将「${moveCat.name}」移动到新位置吗？`,
       success: async (res) => {
         if (!res.confirm) return
-        const { error } = await supabase.from('categories').delete().eq('id', editCat.id)
+        // 收集整个子树（自己 + 后代），计算各自新 level，逐条更新 parent_id / level
+        const updates = []
+        const collect = (node, level) => {
+          updates.push({ id: node.id, parent_id: null, level })
+          if (node.children && node.children.length > 0) {
+            node.children.forEach(c => collect(c, level + 1))
+          }
+        }
+        collect(moveCat, newLevel)
+        // 根节点（自己）的 parent_id 用 newParentId，后代保持原 parent_id
+        updates[0].parent_id = newParentId
+
+        let failed = null
+        for (const u of updates) {
+          const { error } = await supabase.from('categories').update({ parent_id: u.parent_id, level: u.level }).eq('id', u.id)
+          if (error) { failed = error; break }
+        }
+        if (failed) return wx.showToast({ title: failed.message || '移动失败', icon: 'none' })
+        this.setData({ showMove: false })
+        wx.showToast({ title: '移动成功', icon: 'success' })
+        this.loadCategories()
+      }
+    })
+  },
+
+  async handleDelete(e) {
+    // 两个入口：列表项直删（data-id）优先；编辑弹窗删（editCat）回退
+    let catId = (e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.id) || null
+    if (!catId && this.data.editCat) catId = this.data.editCat.id
+    if (!catId) return wx.showToast({ title: '未选择分类', icon: 'none' })
+
+    // 定位完整分类节点（含 name/type/children）
+    let cat = this._findNode(catId)
+    if (!cat && this.data.editCat) cat = this.data.editCat
+    if (!cat) return wx.showToast({ title: '分类不存在', icon: 'none' })
+
+    // 1. 有子分类 → 拦截，必须先处理子分类
+    if (cat.children && cat.children.length > 0) {
+      return wx.showModal({
+        title: '无法删除',
+        content: `该分类下还有 ${cat.children.length} 个子分类，请先删除或移动子分类再删除本分类。`,
+        showCancel: false
+      })
+    }
+
+    // 2. 检查流水 / 预算引用（按 name + type 匹配）
+    const { currentLedger } = this.data
+    const [txRes, budgetRes] = await Promise.all([
+      supabase.from('transactions').select('id').eq('ledger_id', currentLedger.id).eq('category', cat.name).eq('type', cat.type),
+      supabase.from('budgets').select('id').eq('ledger_id', currentLedger.id).eq('category', cat.name)
+    ])
+    const txCount = (txRes.data || []).length
+    const budgetCount = (budgetRes.data || []).length
+    const refCount = txCount + budgetCount
+
+    let content = '删除后无法恢复，确定删除该分类吗？'
+    if (refCount > 0) {
+      const parts = []
+      if (txCount > 0) parts.push(`${txCount} 笔记账`)
+      if (budgetCount > 0) parts.push(`${budgetCount} 条预算`)
+      content = `该分类被 ${parts.join('、')} 引用，删除后相关数据将失去分类关联。确定删除吗？`
+    }
+
+    wx.showModal({
+      title: '确认删除',
+      content,
+      success: async (res) => {
+        if (!res.confirm) return
+        const { error } = await supabase.from('categories').delete().eq('id', catId)
         if (error) return wx.showToast({ title: error.message || '删除失败', icon: 'none' })
         this.setData({ showEdit: false })
         wx.showToast({ title: '删除成功', icon: 'success' })

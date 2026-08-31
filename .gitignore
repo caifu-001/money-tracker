@@ -12,3 +12,7 @@ $RECYCLE.BIN/
 
 # Node.js
 node_modules/
+
+# DB schema/data exports (contain real user data, never commit)
+tbl_*.json
+openapi.json

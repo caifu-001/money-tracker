@@ -97,6 +97,7 @@ page { background: #f0f2f7; }
 }
 .ci-btn-inline { background: #ede9fe; color: #7c3aed; }
 .ci-btn-edit  { background: #e0e7ff; color: #6366f1; }
+.ci-btn-move  { background: #dbeafe; color: #1d4ed8; }
 .ci-btn-del   { background: #fee2e2; color: #ef4444; }
 
 /* 加载/空状态 */
@@ -137,3 +138,21 @@ page { background: #f0f2f7; }
 .sheet-btn.cancel  { background: #f3f4f6; color: #6b7280; }
 .sheet-btn.confirm { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; }
 .sheet-btn.delete  { background: #fee2e2; color: #ef4444; }
+
+/* ── 移动弹窗 ─────────────────────────────── */
+.move-list {
+  max-height: 520rpx;
+  background: #f8fafc;
+  border-radius: 20rpx;
+  padding: 8rpx 0;
+  margin-bottom: 24rpx;
+}
+.move-option {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20rpx 24rpx;
+  font-size: 28rpx; color: #1f2937;
+}
+.move-option:active { background: #eef2ff; }
+.move-option.selected { background: #ede9fe; }
+.move-option.selected .move-option-name { color: #7c3aed; font-weight: 700; }
+.move-option-check { color: #7c3aed; font-size: 32rpx; font-weight: 700; }

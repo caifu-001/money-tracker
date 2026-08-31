@@ -208,8 +208,8 @@
   <!-- 第一行：用户名 + 状态徽章 + 活跃度 -->
   <view class="user-row1">
     <text class="user-name">{{item.name || '未设置昵称'}}</text>
-    <text class="status-tag {{item.status}}" style="background-color: {{item.status == 'active' ? '#d1fae5' : (item.status == 'pending' ? '#fef3c7' : '#fee2e2')}}; color: {{item.status == 'active' ? '#059669' : (item.status == 'pending' ? '#d97706' : '#ef4444')}};">{{item.status == 'active' ? '正常' : (item.status == 'pending' ? '待审核' : '已禁用')}}</text>
-    <text class="activity-badge {{item.activityClass}}" style="background-color: {{item.activityClass == 'online' ? '#d1fae5' : (item.activityClass == 'active' ? '#dbeafe' : (item.activityClass == 'normal' ? '#fef3c7' : (item.activityClass == 'inactive' ? '#ffedd5' : '#f3f4f6')))}}; color: {{item.activityClass == 'online' ? '#059669' : (item.activityClass == 'active' ? '#2563eb' : (item.activityClass == 'normal' ? '#d97706' : (item.activityClass == 'inactive' ? '#ea580c' : '#9ca3af')))}};">{{item.activity}}</text>
+    <text class="status-tag {{item.status}}" style="background-color: {{item.status == 'active' ? '#d1fae5' : (item.status == 'pending' ? '#fef3c7' : (item.status == 'deleted' ? '#f3f4f6' : '#fee2e2'))}}; color: {{item.status == 'active' ? '#059669' : (item.status == 'pending' ? '#d97706' : (item.status == 'deleted' ? '#9ca3af' : '#ef4444'))}};">{{item.status == 'active' ? '正常' : (item.status == 'pending' ? '待审核' : (item.status == 'deleted' ? '已删除' : '已禁用'))}}</text>
+    <text class="activity-badge {{item.activityClass}}" style="background-color: {{item.activityClass == 'online' ? '#d1fae5' : (item.activityClass == 'active' ? '#dbeafe' : (item.activityClass == 'normal' ? '#fef3c7' : (item.activityClass == 'inactive' ? '#ffedd5' : (item.activityClass == 'deleted' ? '#f3f4f6' : '#f3f4f6'))))}}; color: {{item.activityClass == 'online' ? '#059669' : (item.activityClass == 'active' ? '#2563eb' : (item.activityClass == 'normal' ? '#d97706' : (item.activityClass == 'inactive' ? '#ea580c' : (item.activityClass == 'deleted' ? '#9ca3af' : '#9ca3af'))))}};">{{item.status == 'deleted' ? (item.remainDays == null ? '已删除' : '剩余' + item.remainDays + '天') : item.activity}}</text>
     <text class="role-tag" style="background-color: #ede9fe; color: #7c3aed;">{{item.role == 'admin' ? '管理员' : '用户'}}</text>
   </view>
   <!-- 第二行：邮箱 -->
@@ -223,10 +223,11 @@
   </view>
   <!-- 操作按钮 -->
   <view class="user-actions">
-    <text class="action-btn approve" wx:if="{{item.status==='pending'}}" bindtap="handleApproveUser" data-id="{{item.id}}">通过</text>
-    <text class="action-btn disable" wx:if="{{item.status==='active'}}" bindtap="handleDisableUser" data-id="{{item.id}}">禁用</text>
-    <text class="action-btn enable" wx:if="{{item.status==='disabled'}}" bindtap="handleEnableUser" data-id="{{item.id}}">启用</text>
-    <text class="action-btn delete" wx:if="{{item.status==='disabled'}}" bindtap="handleDeleteUser" data-id="{{item.id}}">删除</text>
+    <text class="action-btn approve" wx:if="{{item.status==='pending' && item.id !== user.id}}" bindtap="handleApproveUser" data-id="{{item.id}}">通过</text>
+    <text class="action-btn disable" wx:if="{{item.status==='active' && item.role === 'user' && item.id !== user.id}}" bindtap="handleDisableUser" data-id="{{item.id}}">禁用</text>
+    <text class="action-btn enable" wx:if="{{item.status==='disabled' && item.id !== user.id}}" bindtap="handleEnableUser" data-id="{{item.id}}">启用</text>
+    <text class="action-btn delete" wx:if="{{item.status!=='deleted' && item.status!=='pending' && item.role === 'user' && item.id !== user.id}}" bindtap="handleDeleteUser" data-id="{{item.id}}">删除</text>
+    <text class="action-btn restore" wx:if="{{item.status==='deleted' && item.id !== user.id}}" bindtap="handleRestoreUser" data-id="{{item.id}}">恢复</text>
   </view>
 </view>
 </view>

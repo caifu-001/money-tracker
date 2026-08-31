@@ -44,6 +44,7 @@
         <text class="ci-name">{{lv1.name}}</text>
         <view class="ci-actions">
           <text class="ci-btn ci-btn-inline" bindtap="openAdd" data-parent="{{lv1.id}}">+子级</text>
+          <text class="ci-btn ci-btn-move" bindtap="openMove" data-cat="{{lv1}}">移动</text>
           <text class="ci-btn ci-btn-edit" bindtap="openEdit" data-cat="{{lv1}}">编辑</text>
           <text class="ci-btn ci-btn-del" bindtap="handleDelete" data-id="{{lv1.id}}">删除</text>
         </view>
@@ -60,6 +61,7 @@
             <text class="ci-name">{{lv2.name}}</text>
             <view class="ci-actions">
               <text class="ci-btn ci-btn-inline" bindtap="openAdd" data-parent="{{lv2.id}}">+子级</text>
+              <text class="ci-btn ci-btn-move" bindtap="openMove" data-cat="{{lv2}}">移动</text>
               <text class="ci-btn ci-btn-edit" bindtap="openEdit" data-cat="{{lv2}}">编辑</text>
               <text class="ci-btn ci-btn-del" bindtap="handleDelete" data-id="{{lv2.id}}">删除</text>
             </view>
@@ -72,6 +74,7 @@
                 <view class="ci-icon-text">{{lv3.icon}}</view>
                 <text class="ci-name">{{lv3.name}}</text>
                 <view class="ci-actions">
+                  <text class="ci-btn ci-btn-move" bindtap="openMove" data-cat="{{lv3}}">移动</text>
                   <text class="ci-btn ci-btn-edit" bindtap="openEdit" data-cat="{{lv3}}">编辑</text>
                   <text class="ci-btn ci-btn-del" bindtap="handleDelete" data-id="{{lv3.id}}">删除</text>
                 </view>
@@ -98,6 +101,7 @@
         <text class="ci-name">{{lv1.name}}</text>
         <view class="ci-actions">
           <text class="ci-btn ci-btn-inline" bindtap="openAdd" data-parent="{{lv1.id}}">+子级</text>
+          <text class="ci-btn ci-btn-move" bindtap="openMove" data-cat="{{lv1}}">移动</text>
           <text class="ci-btn ci-btn-edit" bindtap="openEdit" data-cat="{{lv1}}">编辑</text>
           <text class="ci-btn ci-btn-del" bindtap="handleDelete" data-id="{{lv1.id}}">删除</text>
         </view>
@@ -110,6 +114,7 @@
             <view class="ci-icon-text">{{lv2.icon}}</view>
             <text class="ci-name">{{lv2.name}}</text>
             <view class="ci-actions">
+              <text class="ci-btn ci-btn-move" bindtap="openMove" data-cat="{{lv2}}">移动</text>
               <text class="ci-btn ci-btn-edit" bindtap="openEdit" data-cat="{{lv2}}">编辑</text>
               <text class="ci-btn ci-btn-del" bindtap="handleDelete" data-id="{{lv2.id}}">删除</text>
             </view>
@@ -157,6 +162,24 @@
     <text class="sheet-btn delete" bindtap="handleDelete">删除</text>
     <text class="sheet-btn cancel" bindtap="closeEdit">取消</text>
     <text class="sheet-btn confirm" bindtap="handleEdit">保存</text>
+  </view>
+</view>
+
+<!-- 移动弹窗 -->
+<view class="modal-mask" wx:if="{{showMove}}" bindtap="closeMove"></view>
+<view class="modal-sheet {{showMove?'show':''}}">
+  <view class="sheet-handle"></view>
+  <text class="sheet-title">移动分类</text>
+  <text class="sheet-parent-name">将「{{moveCat.name}}」移动到：</text>
+  <scroll-view scroll-y class="move-list">
+    <view wx:for="{{moveTargets}}" wx:key="id" class="move-option {{moveTargetId===item.id?'selected':''}}" bindtap="onMoveTargetTap" data-id="{{item.id}}">
+      <text class="move-option-name" style="padding-left:{{item.depth*36}}rpx">{{item.name}}</text>
+      <text wx:if="{{moveTargetId===item.id}}" class="move-option-check">✓</text>
+    </view>
+  </scroll-view>
+  <view class="sheet-btns">
+    <text class="sheet-btn cancel" bindtap="closeMove">取消</text>
+    <text class="sheet-btn confirm" bindtap="handleMoveConfirm">确定移动</text>
   </view>
 </view>
 </view>

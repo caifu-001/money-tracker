@@ -206,6 +206,29 @@ Page({
       user: user || null,
       isGuest: !user
     })
+
+    // 处理从分析页跳转来的待编辑账单
+    if (app.globalData.pendingEditTxId) {
+      const txId = app.globalData.pendingEditTxId
+      const txDate = app.globalData.pendingEditTxDate || ''
+      app.globalData.pendingEditTxId = null
+      app.globalData.pendingEditTxDate = null
+      // 等数据加载完成后打开编辑弹窗
+      this._pendingOpenEdit = txId
+      // 切到账单所在月份，避免目标账单不在当前月份
+      this._pendingEditNeedReload = false
+      if (txDate && /^\d{4}-\d{2}/.test(txDate)) {
+        const y = parseInt(txDate.slice(0, 4), 10)
+        const m = parseInt(txDate.slice(5, 7), 10)
+        if (y && m && (y !== this.data.currentYear || m !== this.data.currentMonth)) {
+          this.setData({
+            currentYear: y, currentMonth: m,
+            monthLabel: `${y}年${m}月`
+          })
+          this._pendingEditNeedReload = true
+        }
+      }
+    }
     
     if (!user) {
       this.setData({ loading: false, currentLedger: { id: null, name: '暂无账本' }, showCreateLedger: false })
@@ -221,21 +244,68 @@ Page({
     }
     
     const prevId = this.data.currentLedger ? this.data.currentLedger.id : null
+    const needReload = this._pendingEditNeedReload
+    this._pendingEditNeedReload = false
     if (ledger.id !== prevId) {
       this.setData({ currentLedger: { ...ledger }, showCreateLedger: false })
       Promise.all([
         this.loadCatFreq().then(() => this.loadCatTree()),
-        this.loadData()
+        this.loadData().then(() => this._openPendingEdit())
       ])
     } else if (this._lastShownLedgerId !== ledger.id) {
       // 同账本但首次进入（从登录页跳来）
       this._lastShownLedgerId = ledger.id
       Promise.all([
         this.loadCatFreq().then(() => this.loadCatTree()),
-        this.loadData()
+        this.loadData().then(() => this._openPendingEdit())
       ])
+    } else {
+      // 同账本 tab 切换回来，若有待编辑账单则处理
+      if (needReload) {
+        // 从分析页跳转且月份已切换，需重新加载该月份数据
+        Promise.all([
+          this.loadCatFreq().then(() => this.loadCatTree()),
+          this.loadData().then(() => this._openPendingEdit())
+        ])
+      } else {
+        this._openPendingEdit()
+      }
     }
     // 否则是 tab 切换回来，不需要重复加载
+  },
+
+  // 打开从分析页跳转来的待编辑账单
+  _openPendingEdit() {
+    const txId = this._pendingOpenEdit
+    if (!txId) return
+    this._pendingOpenEdit = null
+    const tx = (this.data.transactions || []).find(t => t.id === txId)
+    if (!tx) {
+      // 目标账单不在当前月份列表（可能是其他月份/其他账本）
+      wx.showToast({ title: '账单不在当前月份，请调整月份后重试', icon: 'none' })
+      return
+    }
+    this.openEditByTx(tx)
+  },
+
+  // 直接打开编辑弹窗（供 _openPendingEdit 复用）
+  openEditByTx(tx) {
+    const editCats = this.data.catTree.filter(c => c.type === tx.type)
+    let matchedCategory = tx.category || ''
+    if (!editCats.find(c => c.name === tx.category)) {
+      let clean = tx.category || ''
+      clean = clean.replace(/^[^\s]+\s*/, '').replace(/\s*›\s*[^\s]+\s*/g, ' › ').trim()
+      const found = editCats.find(c => c.name === clean || (c.children && c.children.find(sc => sc.name === clean)))
+      if (found) matchedCategory = clean
+    }
+    this.setData({
+      showEdit: true, editTx: tx,
+      editType: tx.type, editAmount: String(tx.amount),
+      editCategory: matchedCategory, editNote: tx.note || '', editDate: tx.date,
+      editCats, editPaymentMethod: tx.payment_method || 'cash',
+      editReimbursable: !!tx.is_reimbursable,
+      editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [],
+    })
   },
 
   // 游客点击登录（邮箱方式）
