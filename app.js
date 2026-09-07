@@ -112,8 +112,10 @@ App({
     wx.reLaunch({ url: '/pages/login/login' })
   },
 
-  // 静默检查当前登录用户账号状态：被删/禁用则当场踢下线
-  // 节流 60s（onShow 频繁触发时避免重复请求）；返回 'deleted' | 'disabled' | null
+  // 静默检查当前登录用户账号状态：
+  //   - deleted（15天内）→ 自动恢复并刷新登录态
+  //   - disabled → 当场踢下线
+  // 节流 60s；返回 'deleted' | 'disabled' | null
   async checkAccountStatus() {
     const user = this.globalData.user
     if (!user || !user.id) return null
@@ -123,9 +125,21 @@ App({
     try {
       const { data, error } = await supabase.from('users').select('status').eq('id', user.id).maybeSingle()
       if (error || !data) return null
-      if (data.status === 'deleted' || data.status === 'disabled') {
-        this._kickOut(data.status)
-        return data.status
+      if (data.status === 'deleted') {
+        // 15天内登录 → 自动恢复
+        const res = await supabase.rpc('user_self_restore', {})
+        if (res.statusCode >= 400) {
+          // 恢复失败（可能已超15天）→ 踢下线
+          this._kickOut('deleted')
+          return 'deleted'
+        }
+        // 恢复成功，刷新登录态（用户数据保留）
+        wx.showToast({ title: '账号已恢复', icon: 'success' })
+        return null
+      }
+      if (data.status === 'disabled') {
+        this._kickOut('disabled')
+        return 'disabled'
       }
       return null
     } catch (e) {

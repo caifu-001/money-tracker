@@ -355,10 +355,24 @@ Page({
       const { data: userList } = await supabase.from('users').select('*').eq('wechat_openid', result.openid).limit(1)
       if (userList && userList.length > 0) {
         const userData = userList[0]
-        if (userData.status !== 'active') return
+        if (userData.status === 'pending') return
+        if (userData.status === 'disabled') return
         // 用派生密码换 access token（RPC 写操作依赖 auth.uid()）
         const { error: loginErr } = await supabase.auth.signInWithWechat(result.openid, userData.email)
-        if (loginErr) console.error('[tryWechatLogin] 换取 token 失败:', loginErr)
+        if (loginErr) {
+          console.error('[tryWechatLogin] 换取 token 失败:', loginErr)
+          wx.showToast({ title: '登录失败，请重试', icon: 'none' })
+          return
+        }
+        if (userData.status === 'deleted') {
+          // 15天内登录 → 自动恢复（此时已有 access token）
+          const restoreRes = await supabase.rpc('user_self_restore', {})
+          if (restoreRes.statusCode >= 400) {
+            wx.showToast({ title: '账号删除已超15天，无法恢复', icon: 'none' })
+            return
+          }
+          wx.showToast({ title: '账号已恢复', icon: 'success' })
+        }
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
         const [ownRes, memberRes] = await Promise.all([
           supabase.from('ledgers').select('*').eq('owner_id', userData.id).order('created_at'),

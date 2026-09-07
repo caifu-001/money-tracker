@@ -180,5 +180,18 @@ const auth = {
 }
 
 // ─── 导出 ────────────────────────────────────────────────────────────
-const supabase = { auth, from: (t) => new QueryBuilder(t) }
+const supabase = {
+  auth,
+  from: (t) => new QueryBuilder(t),
+  // 调用 Postgres RPC（含 401 自动刷新重试一次）
+  async rpc(fnName, params = {}) {
+    const doCall = () => wxRequest('POST', SUPABASE_URL + '/rest/v1/rpc/' + fnName, params)
+    let res = await doCall()
+    if (res.statusCode === 401) {
+      await refreshToken()
+      res = await doCall()
+    }
+    return { data: res.data, statusCode: res.statusCode }
+  }
+}
 module.exports = { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, refreshToken, deriveWechatPassword }

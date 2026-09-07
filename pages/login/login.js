@@ -137,14 +137,21 @@ Page({
           wx.showToast({ title: '账号已被禁用', icon: 'none' })
           return
         }
-        if (userData.status === 'deleted') {
-          wx.showToast({ title: '账号已被删除', icon: 'none' })
-          return
-        }
         // 用派生密码走标准密码登录，换取 access token（后续 RPC 写操作才能拿到 auth.uid()）
         const { error: loginErr } = await supabase.auth.signInWithWechat(result.openid, userData.email)
         if (loginErr) {
           console.error('[tryWechatLogin] 换取 token 失败:', loginErr)
+          wx.showToast({ title: '登录失败，请重试', icon: 'none' })
+          return
+        }
+        if (userData.status === 'deleted') {
+          // 15天内登录 → 自动恢复（此时已有 access token）
+          const restoreRes = await supabase.rpc('user_self_restore', {})
+          if (restoreRes.statusCode >= 400) {
+            wx.showToast({ title: '账号删除已超15天，无法恢复', icon: 'none' })
+            return
+          }
+          wx.showToast({ title: '账号已恢复', icon: 'success' })
         }
         // 自动登录成功
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
@@ -444,8 +451,13 @@ Page({
         await supabase.auth.signOut()
         throw new Error('账号已被禁用，请联系管理员')
       } else if (userData.status === 'deleted') {
-        await supabase.auth.signOut()
-        throw new Error('账号已被删除，请联系管理员')
+        // 15天内登录 → 自动恢复（此时已用 signInWithPassword 拿到 token）
+        const restoreRes = await supabase.rpc('user_self_restore', {})
+        if (restoreRes.statusCode >= 400) {
+          await supabase.auth.signOut()
+          throw new Error('账号删除已超15天，无法恢复')
+        }
+        wx.showToast({ title: '账号已恢复', icon: 'success' })
       }
 
       const user = { id: data.user.id, email: data.user.email, name: (userData && userData.name) || loginId, role: (userData && userData.role) || 'user' }
