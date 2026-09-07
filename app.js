@@ -111,4 +111,49 @@ App({
     this.globalData.currentLedger = null
     wx.reLaunch({ url: '/pages/login/login' })
   },
+
+  // 静默检查当前登录用户账号状态：被删/禁用则当场踢下线
+  // 节流 60s（onShow 频繁触发时避免重复请求）；返回 'deleted' | 'disabled' | null
+  async checkAccountStatus() {
+    const user = this.globalData.user
+    if (!user || !user.id) return null
+    const now = Date.now()
+    if (this._lastStatusCheck && now - this._lastStatusCheck < 60000) return null
+    this._lastStatusCheck = now
+    try {
+      const { data, error } = await supabase.from('users').select('status').eq('id', user.id).maybeSingle()
+      if (error || !data) return null
+      if (data.status === 'deleted' || data.status === 'disabled') {
+        this._kickOut(data.status)
+        return data.status
+      }
+      return null
+    } catch (e) {
+      console.error('[checkAccountStatus]', e)
+      return null
+    }
+  },
+
+  // 当场踢下线：清登录态 + 弹窗 + 回登录页
+  _kickOut(reason) {
+    if (this._kickingOut) return
+    this._kickingOut = true
+    const msg = reason === 'deleted' ? '您的账号已被删除' : '您的账号已被禁用'
+    wx.removeStorageSync('user_info')
+    wx.removeStorageSync('session_date')
+    wx.removeStorageSync('sb_access_token')
+    wx.removeStorageSync('sb_refresh_token')
+    this.globalData.user = null
+    this.globalData.currentLedger = null
+    supabase.auth.signOut()  // fire-and-forget，不阻塞弹窗
+    wx.showModal({
+      title: '账号状态异常',
+      content: msg + '，已为您退出登录。',
+      showCancel: false,
+      success: () => {
+        this._kickingOut = false
+        wx.reLaunch({ url: '/pages/login/login' })
+      }
+    })
+  },
 })

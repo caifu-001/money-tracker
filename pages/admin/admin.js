@@ -1,6 +1,6 @@
 ﻿// pages/admin/admin.js
 const app = getApp()
-const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } = require('../../utils/supabase')
+const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, refreshToken } = require('../../utils/supabase')
 const { initDefaultCategories } = require('../../utils/categories')
 
 // 北京时间格式化：数据库存 UTC，展示统一 +8
@@ -72,6 +72,9 @@ Page({
     // 刷新用户状态
     const user = app.globalData.user
     this.setData({ user: user || null, isGuest: !user })
+    
+    // 被删/被禁用用户当场踢下线
+    if (user && user.id) app.checkAccountStatus()
     
     const currentLedger = app.globalData.currentLedger
     this.setData({ currentLedger })
@@ -436,19 +439,41 @@ Page({
   },
 
   // 调用后端 SECURITY DEFINER RPC（内部做最终权限校验，前端被绕过也无法越权）
-  _callAdminRpc(fnName, params) {
+  // token 过期（401）或 JWT 无 uid（400「未登录」）→ 刷新后重试一次
+  _callAdminRpc(fnName, params, _retried) {
     return new Promise((resolve) => {
+      const url = SUPABASE_URL + '/rest/v1/rpc/' + fnName
+      const token = wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY
       wx.request({
-        url: SUPABASE_URL + '/rest/v1/rpc/' + fnName,
+        url,
         method: 'POST',
         data: params,
         header: {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_ANON_KEY,
-          'Authorization': 'Bearer ' + (wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY),
+          'Authorization': 'Bearer ' + token,
         },
-        success: r => resolve(r),
-        fail: e => resolve({ statusCode: 0, data: { error: '网络异常' } })
+        success: r => {
+          console.log('[adminRpc]', fnName, 'status:', r.statusCode, 'body:', JSON.stringify(r.data))
+          const msg = r.data && r.data.message
+          const needRefresh = r.statusCode === 401 || (r.statusCode === 400 && msg === '未登录')
+          if (needRefresh && !_retried) {
+            refreshToken().then((newToken) => {
+              if (newToken) {
+                this._callAdminRpc(fnName, params, true).then(resolve)
+              } else {
+                console.log('[adminRpc]', fnName, '刷新失败，返回原始错误')
+                resolve(r)
+              }
+            })
+          } else {
+            resolve(r)
+          }
+        },
+        fail: e => {
+          console.error('[adminRpc]', fnName, 'fail:', e)
+          resolve({ statusCode: 0, data: { error: '网络异常' } })
+        }
       })
     })
   },

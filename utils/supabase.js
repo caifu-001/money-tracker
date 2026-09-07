@@ -6,6 +6,18 @@ const SUPABASE_SERVICE_KEY = null // 用户需要填写完整的 service_role ke
 
 let _refreshing = null
 
+// 微信静默登录：用 openid 派生确定性密码（openid 在小程序内稳定且仅通过 code+secret 可获取）
+// 注册与登录用同一算法，从而可用标准 signInWithPassword 换取 access token
+function deriveWechatPassword(openid) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < openid.length; i++) {
+    h ^= openid.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  const tail = String(openid).replace(/[^a-zA-Z0-9]/g, '').slice(-6)
+  return 'wx' + tail + h.toString(36)
+}
+
 function getToken() {
   return wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY
 }
@@ -44,7 +56,11 @@ async function refreshToken() {
     wx.removeStorageSync('sb_refresh_token')
     return null
   })()
-  return _refreshing
+  try {
+    return await _refreshing
+  } finally {
+    _refreshing = null
+  }
 }
 
 // ─── QueryBuilder ───────────────────────────────────────────────────
@@ -128,6 +144,11 @@ const auth = {
     return { data: null, error: { message: msg } }
   },
 
+  // 微信静默登录：用 openid 派生的确定性密码走标准密码登录，换取 access token
+  async signInWithWechat(openid, email) {
+    return this.signInWithPassword({ email, password: deriveWechatPassword(openid) })
+  },
+
   async signUp(creds) {
     const res = await wxRequest('POST', SUPABASE_URL + '/auth/v1/signup', {
       email: creds.email, password: creds.password,
@@ -160,4 +181,4 @@ const auth = {
 
 // ─── 导出 ────────────────────────────────────────────────────────────
 const supabase = { auth, from: (t) => new QueryBuilder(t) }
-module.exports = { supabase, SUPABASE_URL, SUPABASE_ANON_KEY }
+module.exports = { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, refreshToken, deriveWechatPassword }

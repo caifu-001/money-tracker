@@ -51,6 +51,7 @@ Page({
   onShow() {
     const user = app.globalData.user
     this.setData({ user: user || null, isGuest: !user })
+    if (user && user.id) app.checkAccountStatus()
     const ledger = app.globalData.currentLedger
     const { year, month } = this.data
     if (ledger && ledger.id !== this.data.currentLedger?.id) {

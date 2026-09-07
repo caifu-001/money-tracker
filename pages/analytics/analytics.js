@@ -98,6 +98,8 @@ Page({
   onShow() {
     console.log('[Analytics onShow] globalData.currentLedger:', app.globalData.currentLedger)
     console.log('[Analytics onShow] this.data.year/month:', this.data.year, this.data.month)
+    const user = app.globalData.user
+    if (user && user.id) app.checkAccountStatus()
     // 兜底：确保年月已初始化，防止 onShow 先于 onLoad 的 setData 执行
     if (!this.data.year || !this.data.month) {
       const now = new Date()

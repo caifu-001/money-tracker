@@ -141,6 +141,11 @@ Page({
           wx.showToast({ title: '账号已被删除', icon: 'none' })
           return
         }
+        // 用派生密码走标准密码登录，换取 access token（后续 RPC 写操作才能拿到 auth.uid()）
+        const { error: loginErr } = await supabase.auth.signInWithWechat(result.openid, userData.email)
+        if (loginErr) {
+          console.error('[tryWechatLogin] 换取 token 失败:', loginErr)
+        }
         // 自动登录成功
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
         console.log('[tryWechatLogin] 微信登录成功，准备更新 last_login，用户ID:', user.id)
@@ -193,7 +198,8 @@ Page({
       const randomId = Math.random().toString(36).slice(2, 10)
       const name = '微信用户' + randomId
       const email = `wx_${randomId}@wechat.local`
-      const password = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+      // 用 openid 派生确定性密码（与登录端 deriveWechatPassword 一致）
+      const password = require('../../utils/supabase').deriveWechatPassword(wechatOpenid)
 
       // 创建 Supabase Auth 用户
       const { data: authData, error: authError } = await supabase.auth.signUp({

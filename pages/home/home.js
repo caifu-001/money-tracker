@@ -1,6 +1,6 @@
 ﻿// pages/home/home.js
 const app = getApp()
-const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } = require('../../utils/supabase')
+const { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, deriveWechatPassword } = require('../../utils/supabase')
 const { initDefaultCategories } = require('../../utils/categories')
 
 const PAYMENT_METHODS = [
@@ -207,6 +207,9 @@ Page({
       isGuest: !user
     })
 
+    // 被删/被禁用用户当场踢下线（静默检查，节流 60s）
+    if (user && user.id) app.checkAccountStatus()
+
     // 处理从分析页跳转来的待编辑账单
     if (app.globalData.pendingEditTxId) {
       const txId = app.globalData.pendingEditTxId
@@ -353,6 +356,9 @@ Page({
       if (userList && userList.length > 0) {
         const userData = userList[0]
         if (userData.status !== 'active') return
+        // 用派生密码换 access token（RPC 写操作依赖 auth.uid()）
+        const { error: loginErr } = await supabase.auth.signInWithWechat(result.openid, userData.email)
+        if (loginErr) console.error('[tryWechatLogin] 换取 token 失败:', loginErr)
         const user = { id: userData.id, email: userData.email, name: userData.name, role: userData.role }
         const [ownRes, memberRes] = await Promise.all([
           supabase.from('ledgers').select('*').eq('owner_id', userData.id).order('created_at'),
@@ -440,7 +446,7 @@ Page({
       const randomId = Math.random().toString(36).slice(2, 10)
       const name = '微信用户' + randomId
       const email = `wx_${randomId}@wechat.local`
-      const password = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+      const password = deriveWechatPassword(wechatOpenid)
       const { data: authData, error: authError } = await supabase.auth.signUp({ email, password, options: { data: { name } } })
       if (authError) throw new Error(authError.message)
       const settingRes = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()

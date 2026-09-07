@@ -44,6 +44,7 @@ Page({
     // 刷新用户状态
     const user = app.globalData.user
     this.setData({ user: user || null, isGuest: !user })
+    if (user && user.id) app.checkAccountStatus()
     
     const currentLedger = app.globalData.currentLedger
     if (currentLedger && currentLedger.id !== this.data.currentLedger?.id) {
