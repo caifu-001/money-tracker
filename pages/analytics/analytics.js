@@ -49,9 +49,16 @@ Page({
     monthLabel: '',
     // 筛选
     searchCat: '',
-    catFilter: '',
     allCategories: [],
+    // 分类目录筛选
     showCatFilter: false,
+    filterType: 'expense',
+    filterExpenseTree: [],
+    filterIncomeTree: [],
+    catFilterId: '',
+    catFilterName: '',
+    catFilterType: '',
+    catFilterNames: [],
     // 分析类型切换
     viewType: 'expense',  // expense | income | payment
     // 设预算弹窗
@@ -217,7 +224,7 @@ Page({
 
   clearSearch() {
     if (this._searchTimer) clearTimeout(this._searchTimer)
-    this.setData({ searchCat: '', catFilter: '', filteredExpenseList: null, filteredIncomeList: null, filteredPaymentList: null })
+    this.setData({ searchCat: '', filteredExpenseList: null, filteredIncomeList: null, filteredPaymentList: null })
     this.loadData()
   },
 
@@ -229,13 +236,91 @@ Page({
     this.loadData()
   },
 
-  toggleCatFilter() {
-    this.setData({ showCatFilter: !this.data.showCatFilter })
+  // ── 分类目录筛选 ──
+  // 构建分类树（用于筛选选择器）
+  _buildTree(cats, type) {
+    const map = {}
+    const roots = []
+    const filtered = (cats || []).filter(c => c.type === type)
+    filtered.forEach(c => {
+      map[c.id] = { id: c.id, name: c.name, icon: c.icon || '📌', type: c.type, children: [], expanded: false, depth: 0 }
+    })
+    filtered.forEach(c => {
+      const node = map[c.id]
+      if (c.parent_id && map[c.parent_id]) map[c.parent_id].children.push(node)
+      else if (!c.parent_id) roots.push(node)
+    })
+    // 递归标注层级深度（根=1），供缩进 + WXML 字面量属性访问
+    const setDepth = (node, depth) => {
+      node.depth = depth
+      node.children.forEach(ch => setDepth(ch, depth + 1))
+    }
+    roots.forEach(r => setDepth(r, 1))
+    return roots
   },
 
-  selectCatFilter(e) {
-    const cat = e.currentTarget.dataset.cat
-    this.setData({ catFilter: this.data.catFilter === cat ? '' : cat, showCatFilter: false })
+  // 收集某分类节点 + 所有后代的名字集合（用于过滤流水）
+  _collectCategoryNames(id) {
+    const cats = this._cats || []
+    const names = []
+    const queue = [id]
+    while (queue.length) {
+      const cid = queue.shift()
+      const node = cats.find(c => c.id === cid)
+      if (node) {
+        names.push(node.name)
+        cats.filter(c => c.parent_id === cid).forEach(ch => queue.push(ch.id))
+      }
+    }
+    return names
+  },
+
+  toggleCatFilter() {
+    const { viewType } = this.data
+    this.setData({
+      showCatFilter: true,
+      filterType: viewType === 'income' ? 'income' : 'expense',
+    })
+  },
+
+  closeCatFilter() {
+    this.setData({ showCatFilter: false })
+  },
+
+  setFilterType(e) {
+    this.setData({ filterType: e.currentTarget.dataset.type })
+  },
+
+  toggleFilterExpand(e) {
+    const id = e.currentTarget.dataset.id
+    const treeKey = this.data.filterType === 'income' ? 'filterIncomeTree' : 'filterExpenseTree'
+    const tree = this.data[treeKey] || []
+    // 递归定位节点并翻转 expanded（WXML 用 n.expanded 字面量属性读取，不能用 filterExpanded[id] 动态键）
+    const update = (nodes) => nodes.map(n => {
+      if (n.id === id) return { ...n, expanded: !n.expanded }
+      if (n.children && n.children.length) return { ...n, children: update(n.children) }
+      return n
+    })
+    this.setData({ [treeKey]: update(tree) })
+  },
+
+  selectFilterNode(e) {
+    const { id, name, type } = e.currentTarget.dataset
+    const names = this._collectCategoryNames(id)
+    this.setData({
+      catFilterId: id,
+      catFilterName: name,
+      catFilterType: type,
+      catFilterNames: names,
+      showCatFilter: false,
+    })
+    this.loadData()
+  },
+
+  clearCatFilter() {
+    this.setData({
+      catFilterId: '', catFilterName: '', catFilterType: '', catFilterNames: [],
+    })
     this.loadData()
   },
 
@@ -331,7 +416,7 @@ Page({
       return
     }
     this.setData({ loading: true })
-    const { catFilter } = this.data
+    const { catFilterNames } = this.data
 
     let q = supabase.from('transactions').select('id,amount,type,category,date,user_id,payment_method,note')
       .eq('ledger_id', currentLedger.id).order('date')
@@ -340,9 +425,9 @@ Page({
       q = q.gte('date', start).lte('date', end)
     }
     
-    // 类别筛选
-    if (catFilter) {
-      q = q.eq('category', catFilter)
+    // 分类目录筛选：选中分类 + 所有后代的名字集合
+    if (catFilterNames && catFilterNames.length > 0) {
+      q = q.in('category', catFilterNames)
     }
 
     const { data: txs } = await q
@@ -366,6 +451,9 @@ Page({
     const { data: cats } = await supabase.from('categories')
       .select('*').eq('ledger_id', currentLedger.id)
     this._cats = cats || []
+    // 构建分类树供筛选选择器使用
+    const filterExpenseTree = this._buildTree(cats || [], 'expense')
+    const filterIncomeTree = this._buildTree(cats || [], 'income')
 
     // 支出分类统计
     const expMap = {}
@@ -519,6 +607,8 @@ Page({
       budgetStatus,
       allCategories,
       paymentBreakdown,
+      filterExpenseTree,
+      filterIncomeTree,
     }, () => {
       // setData 回调中执行搜索过滤，此时 this.data 已是最新
       this.applySearchFilter()

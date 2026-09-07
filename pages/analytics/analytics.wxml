@@ -53,6 +53,20 @@
       <view class="search-clear" wx:if="{{searchCat}}" bindtap="clearSearch"><text>✕</text></view>
     </view>
 
+    <!-- 分类目录筛选 -->
+    <view class="cat-filter-bar">
+      <view class="cf-btn" bindtap="toggleCatFilter">
+        <text class="cf-icon">🗂️</text>
+        <text class="cf-label">{{catFilterName || '按分类目录统计'}}</text>
+        <text class="cf-arrow">›</text>
+      </view>
+      <view class="cf-clear" wx:if="{{catFilterName}}" bindtap="clearCatFilter"><text>✕ 清除</text></view>
+    </view>
+    <!-- 分类筛选激活提示 -->
+    <view class="cat-filter-active" wx:if="{{catFilterName}}">
+      <text class="cfa-text">当前统计目录：{{catFilterName}}（含 {{catFilterNames.length}} 个子分类）</text>
+    </view>
+
     <!-- 搜索结果 - 紧贴搜索框下方 -->
     <view wx:if="{{searchCat && viewType==='expense'}}">
       <view class="breakdown-section" wx:if="{{filteredExpenseList && filteredExpenseList.length > 0}}">
@@ -271,6 +285,138 @@
       </view>
       <view class="detail-empty" wx:if="{{detailList.length===0}}">
         <text>暂无账单</text>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 分类目录选择弹窗 -->
+  <view class="detail-mask" wx:if="{{showCatFilter}}" bindtap="closeCatFilter"></view>
+  <view class="detail-sheet {{showCatFilter?'show':''}}">
+    <view class="detail-header">
+      <text class="detail-title">选择统计目录</text>
+      <view class="detail-close" bindtap="closeCatFilter"><text>✕</text></view>
+    </view>
+    <view class="cf-type-tabs">
+      <view class="cf-type-tab {{filterType==='expense'?'active':''}}" bindtap="setFilterType" data-type="expense"><text>💸 支出</text></view>
+      <view class="cf-type-tab {{filterType==='income'?'active':''}}" bindtap="setFilterType" data-type="income"><text>💰 收入</text></view>
+    </view>
+    <scroll-view class="detail-body" scroll-y>
+      <view class="cf-tree" wx:if="{{filterType==='expense'}}">
+        <block wx:for="{{filterExpenseTree}}" wx:key="id" wx:for-item="n1">
+          <view class="cf-node" style="padding-left:{{24+(n1.depth-1)*36}}rpx">
+            <view class="cf-expand {{n1.children.length?'has':''}}" bindtap="toggleFilterExpand" data-id="{{n1.id}}">
+              <text wx:if="{{n1.children.length}}">{{n1.expanded?'▼':'▶'}}</text>
+              <text wx:else>·</text>
+            </view>
+            <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n1.id}}" data-name="{{n1.name}}" data-type="expense">
+              <text class="cf-node-icon">{{n1.icon}}</text>
+              <text class="cf-node-name">{{n1.name}}</text>
+              <text class="cf-node-check" wx:if="{{catFilterId===n1.id}}">✓</text>
+            </view>
+          </view>
+          <block wx:if="{{n1.expanded}}">
+            <block wx:for="{{n1.children}}" wx:for-item="n2" wx:key="id">
+              <view class="cf-node" style="padding-left:{{24+(n2.depth-1)*36}}rpx">
+                <view class="cf-expand {{n2.children.length?'has':''}}" bindtap="toggleFilterExpand" data-id="{{n2.id}}">
+                  <text wx:if="{{n2.children.length}}">{{n2.expanded?'▼':'▶'}}</text>
+                  <text wx:else>·</text>
+                </view>
+                <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n2.id}}" data-name="{{n2.name}}" data-type="expense">
+                  <text class="cf-node-icon">{{n2.icon}}</text>
+                  <text class="cf-node-name">{{n2.name}}</text>
+                  <text class="cf-node-check" wx:if="{{catFilterId===n2.id}}">✓</text>
+                </view>
+              </view>
+              <block wx:if="{{n2.expanded}}">
+                <block wx:for="{{n2.children}}" wx:for-item="n3" wx:key="id">
+                  <view class="cf-node" style="padding-left:{{24+(n3.depth-1)*36}}rpx">
+                    <view class="cf-expand {{n3.children.length?'has':''}}" bindtap="toggleFilterExpand" data-id="{{n3.id}}">
+                      <text wx:if="{{n3.children.length}}">{{n3.expanded?'▼':'▶'}}</text>
+                      <text wx:else>·</text>
+                    </view>
+                    <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n3.id}}" data-name="{{n3.name}}" data-type="expense">
+                      <text class="cf-node-icon">{{n3.icon}}</text>
+                      <text class="cf-node-name">{{n3.name}}</text>
+                      <text class="cf-node-check" wx:if="{{catFilterId===n3.id}}">✓</text>
+                    </view>
+                  </view>
+                  <block wx:if="{{n3.expanded}}">
+                    <block wx:for="{{n3.children}}" wx:for-item="n4" wx:key="id">
+                      <view class="cf-node" style="padding-left:{{24+(n4.depth-1)*36}}rpx">
+                        <view class="cf-expand"><text>·</text></view>
+                        <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n4.id}}" data-name="{{n4.name}}" data-type="expense">
+                          <text class="cf-node-icon">{{n4.icon}}</text>
+                          <text class="cf-node-name">{{n4.name}}</text>
+                          <text class="cf-node-check" wx:if="{{catFilterId===n4.id}}">✓</text>
+                        </view>
+                      </view>
+                    </block>
+                  </block>
+                </block>
+              </block>
+            </block>
+          </block>
+        </block>
+      </view>
+      <view class="cf-tree" wx:if="{{filterType==='income'}}">
+        <block wx:for="{{filterIncomeTree}}" wx:key="id" wx:for-item="n1">
+          <view class="cf-node" style="padding-left:{{24+(n1.depth-1)*36}}rpx">
+            <view class="cf-expand {{n1.children.length?'has':''}}" bindtap="toggleFilterExpand" data-id="{{n1.id}}">
+              <text wx:if="{{n1.children.length}}">{{n1.expanded?'▼':'▶'}}</text>
+              <text wx:else>·</text>
+            </view>
+            <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n1.id}}" data-name="{{n1.name}}" data-type="income">
+              <text class="cf-node-icon">{{n1.icon}}</text>
+              <text class="cf-node-name">{{n1.name}}</text>
+              <text class="cf-node-check" wx:if="{{catFilterId===n1.id}}">✓</text>
+            </view>
+          </view>
+          <block wx:if="{{n1.expanded}}">
+            <block wx:for="{{n1.children}}" wx:for-item="n2" wx:key="id">
+              <view class="cf-node" style="padding-left:{{24+(n2.depth-1)*36}}rpx">
+                <view class="cf-expand {{n2.children.length?'has':''}}" bindtap="toggleFilterExpand" data-id="{{n2.id}}">
+                  <text wx:if="{{n2.children.length}}">{{n2.expanded?'▼':'▶'}}</text>
+                  <text wx:else>·</text>
+                </view>
+                <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n2.id}}" data-name="{{n2.name}}" data-type="income">
+                  <text class="cf-node-icon">{{n2.icon}}</text>
+                  <text class="cf-node-name">{{n2.name}}</text>
+                  <text class="cf-node-check" wx:if="{{catFilterId===n2.id}}">✓</text>
+                </view>
+              </view>
+              <block wx:if="{{n2.expanded}}">
+                <block wx:for="{{n2.children}}" wx:for-item="n3" wx:key="id">
+                  <view class="cf-node" style="padding-left:{{24+(n3.depth-1)*36}}rpx">
+                    <view class="cf-expand {{n3.children.length?'has':''}}" bindtap="toggleFilterExpand" data-id="{{n3.id}}">
+                      <text wx:if="{{n3.children.length}}">{{n3.expanded?'▼':'▶'}}</text>
+                      <text wx:else>·</text>
+                    </view>
+                    <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n3.id}}" data-name="{{n3.name}}" data-type="income">
+                      <text class="cf-node-icon">{{n3.icon}}</text>
+                      <text class="cf-node-name">{{n3.name}}</text>
+                      <text class="cf-node-check" wx:if="{{catFilterId===n3.id}}">✓</text>
+                    </view>
+                  </view>
+                  <block wx:if="{{n3.expanded}}">
+                    <block wx:for="{{n3.children}}" wx:for-item="n4" wx:key="id">
+                      <view class="cf-node" style="padding-left:{{24+(n4.depth-1)*36}}rpx">
+                        <view class="cf-expand"><text>·</text></view>
+                        <view class="cf-node-main" bindtap="selectFilterNode" data-id="{{n4.id}}" data-name="{{n4.name}}" data-type="income">
+                          <text class="cf-node-icon">{{n4.icon}}</text>
+                          <text class="cf-node-name">{{n4.name}}</text>
+                          <text class="cf-node-check" wx:if="{{catFilterId===n4.id}}">✓</text>
+                        </view>
+                      </view>
+                    </block>
+                  </block>
+                </block>
+              </block>
+            </block>
+          </block>
+        </block>
+      </view>
+      <view class="detail-empty" wx:if="{{(filterType==='expense' && filterExpenseTree.length===0) || (filterType==='income' && filterIncomeTree.length===0)}}">
+        <text>暂无分类</text>
       </view>
     </scroll-view>
   </view>
