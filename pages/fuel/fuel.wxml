@@ -9,14 +9,13 @@
 
 <!-- 已登录 -->
 <block wx:else>
-  <!-- 车辆切换 -->
-  <view class="vehicle-tabs" wx:if="{{vehicleOptions.length > 1}}">
-    <picker range="{{vehicleOptions}}" value="{{vehicleIndex}}" bindchange="onVehicleChange">
-      <view class="vehicle-picker">
-        <text class="vehicle-picker-name">{{vehicleOptions[vehicleIndex]}}</text>
-        <text class="vehicle-picker-arrow">▾</text>
+  <!-- 车辆 tab 切换 -->
+  <view class="vehicle-tabs" wx:if="{{tabs.length > 1}}">
+    <scroll-view scroll-x class="tabs-scroll" enable-flex>
+      <view class="tab {{activeTab===index?'active':''}}" wx:for="{{tabs}}" wx:key="id" data-index="{{index}}" bindtap="onTabTap">
+        <text class="tab-name">{{item.name}}</text>
       </view>
-    </picker>
+    </scroll-view>
   </view>
 
   <!-- 加载中 -->

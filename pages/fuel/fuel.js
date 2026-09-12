@@ -1,4 +1,4 @@
-// pages/fuel/fuel.js - 油耗统计页
+// pages/fuel/fuel.js - 油耗统计页（每辆车独立统计）
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
 
@@ -9,16 +9,87 @@ const fmtDate = (d) => {
   return `${parseInt(parts[1])}月${parseInt(parts[2])}日`
 }
 
+// 对某辆车（或未指定车辆）的油费记录做完整统计
+function computeVehicle(tx) {
+  // 仅取有有效里程的记录用于油耗/每公里计算，按里程升序
+  const valid = tx
+    .filter(t => t.odometer != null && !isNaN(Number(t.odometer)))
+    .map(t => ({
+      ...t,
+      odometer: Number(t.odometer),
+      amount: Number(t.amount),
+      fuel_liters: (t.fuel_liters != null && !isNaN(Number(t.fuel_liters))) ? Number(t.fuel_liters) : null,
+    }))
+    .sort((a, b) => a.odometer - b.odometer)
+
+  let totalLiters = 0, totalAmount = 0
+  valid.forEach(r => {
+    totalAmount += r.amount
+    if (r.fuel_liters != null) totalLiters += r.fuel_liters
+  })
+  const totalDist = valid.length > 1 ? valid[valid.length - 1].odometer - valid[0].odometer : 0
+
+  const summary = {
+    count: valid.length,
+    totalAmount: totalAmount.toFixed(2),
+    totalLiters: totalLiters > 0 ? totalLiters.toFixed(2) : '--',
+    totalDist: totalDist > 0 ? totalDist.toFixed(0) : '--',
+    avgConsumption: (totalDist > 0 && totalLiters > 0) ? (totalLiters / totalDist * 100).toFixed(2) : null,
+    avgPerKm: totalDist > 0 ? (totalAmount / totalDist).toFixed(3) : null,
+  }
+
+  const records = valid.map((r, i) => {
+    let dist = null, consumption = null, perKm = null
+    if (i > 0) {
+      const prev = valid[i - 1]
+      dist = r.odometer - prev.odometer
+      if (dist > 0) {
+        consumption = r.fuel_liters != null ? (r.fuel_liters / dist * 100).toFixed(2) : null
+        perKm = (r.amount / dist).toFixed(3)
+      }
+    }
+    return {
+      id: r.id,
+      date: r.date,
+      dateLabel: fmtDate(r.date),
+      amount: r.amount.toFixed(2),
+      liters: r.fuel_liters != null ? r.fuel_liters.toFixed(2) : '--',
+      odometer: r.odometer,
+      dist: (dist != null && dist > 0) ? dist.toFixed(0) : null,
+      consumption,
+      perKm,
+      note: r.note || '',
+      isFirst: i === 0,
+    }
+  })
+
+  // 每月油费小计（含无里程记录，按 date 月份分组）
+  const monthMap = {}
+  tx.forEach(t => {
+    const m = (t.date || '').slice(0, 7)
+    if (!m) return
+    monthMap[m] = (monthMap[m] || 0) + Number(t.amount)
+  })
+  const monthlyStats = Object.entries(monthMap)
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([month, amount]) => {
+      const p = month.split('-')
+      return { month, monthLabel: `${p[0]}年${parseInt(p[1])}月`, amount: amount.toFixed(2) }
+    })
+
+  return { summary, records, monthlyStats, recordCount: tx.length }
+}
+
 Page({
   data: {
     loading: true,
     isGuest: true,
     user: null,
-    vehicleOptions: [],   // ['全部车辆', ...车名]
-    vehicleIndex: 0,
-    summary: null,        // { count, totalAmount, totalLiters, totalDist, avgConsumption, avgPerKm }
-    monthlyStats: [],     // [{ month, monthLabel, amount }]
-    records: [],          // 加油明细
+    tabs: [],            // [{ id, name, vehicleId }] vehicleId 为 null 表示未指定车辆
+    activeTab: 0,
+    summary: null,
+    monthlyStats: [],
+    records: [],
     hasData: false,
   },
 
@@ -34,9 +105,9 @@ Page({
     if (user) this.loadData()
   },
 
-  onVehicleChange(e) {
-    this.setData({ vehicleIndex: Number(e.detail.value) })
-    this.renderByVehicle()
+  onTabTap(e) {
+    this.setData({ activeTab: Number(e.currentTarget.dataset.index) })
+    this.renderActive()
   },
 
   async loadData() {
@@ -56,107 +127,57 @@ Page({
       this._vehicles = vehicles || []
       this._fuelTx = fuelTx || []
 
-      const vehicleOptions = ['全部车辆', ...this._vehicles.map(v => v.name)]
-      this.setData({
-        vehicleOptions,
-        vehicleIndex: 0,
-        hasData: (this._fuelTx || []).length > 0,
+      // 按 vehicle_id 分组：每辆车一个 tab，未绑定车辆的分到「未指定车辆」
+      const groups = []  // [{ vehicleId, name, tx:[] }]
+      const byId = {}
+      ;(this._fuelTx || []).forEach(t => {
+        const key = t.vehicle_id || '__none__'
+        if (!byId[key]) byId[key] = []
+        byId[key].push(t)
       })
-      this.renderByVehicle()
+
+      // 先按车辆顺序建 tab
+      const tabs = []
+      this._vehicles.forEach(v => {
+        const key = v.id
+        if (byId[key]) {
+          tabs.push({ id: key, vehicleId: v.id, name: v.name, tx: byId[key] })
+          delete byId[key]
+        } else {
+          // 车辆存在但还没有加油记录：也展示（空统计）
+          tabs.push({ id: key, vehicleId: v.id, name: v.name, tx: [] })
+        }
+      })
+      // 剩余未绑定车辆的记录
+      if (byId['__none__']) {
+        tabs.push({ id: '__none__', vehicleId: null, name: '未指定车辆', tx: byId['__none__'] })
+      }
+
+      this._tabs = tabs
+      const hasData = (this._fuelTx || []).length > 0
+      this.setData({ tabs, activeTab: 0, hasData })
+      this.renderActive()
     } catch (e) {
       console.error('[fuel] loadData error', e)
       this.setData({ loading: false })
     }
   },
 
-  renderByVehicle() {
-    const { vehicleIndex } = this.data
-    const vehicles = this._vehicles || []
-    const allTx = this._fuelTx || []
-
-    let tx = allTx
-    if (vehicleIndex > 0) {
-      const v = vehicles[vehicleIndex - 1]
-      if (v) tx = allTx.filter(t => t.vehicle_id === v.id)
+  renderActive() {
+    const { activeTab } = this.data
+    const tabs = this._tabs || []
+    if (!tabs.length) {
+      this.setData({ loading: false, summary: null, records: [], monthlyStats: [] })
+      return
     }
-
-    const vName = {}
-    vehicles.forEach(v => { vName[v.id] = v.name })
-
-    // 仅取有有效里程的记录用于油耗/每公里计算，按里程升序
-    const valid = tx
-      .filter(t => t.odometer != null && !isNaN(Number(t.odometer)))
-      .map(t => ({
-        ...t,
-        odometer: Number(t.odometer),
-        amount: Number(t.amount),
-        fuel_liters: (t.fuel_liters != null && !isNaN(Number(t.fuel_liters))) ? Number(t.fuel_liters) : null,
-      }))
-      .sort((a, b) => a.odometer - b.odometer)
-
-    let totalLiters = 0, totalAmount = 0
-    valid.forEach(r => {
-      totalAmount += r.amount
-      if (r.fuel_liters != null) totalLiters += r.fuel_liters
+    const cur = tabs[activeTab] || tabs[0]
+    const r = computeVehicle(cur.tx || [])
+    this.setData({
+      loading: false,
+      summary: r.summary,
+      records: r.records,
+      monthlyStats: r.monthlyStats,
     })
-    const firstOdo = valid.length ? valid[0].odometer : null
-    const lastOdo = valid.length ? valid[valid.length - 1].odometer : null
-    const totalDist = (firstOdo != null && lastOdo != null) ? (lastOdo - firstOdo) : 0
-
-    const avgConsumption = (totalDist > 0 && totalLiters > 0) ? totalLiters / totalDist * 100 : null
-    const avgPerKm = totalDist > 0 ? totalAmount / totalDist : null
-
-    const summary = {
-      count: valid.length,
-      totalAmount: totalAmount.toFixed(2),
-      totalLiters: totalLiters > 0 ? totalLiters.toFixed(2) : '--',
-      totalDist: totalDist > 0 ? totalDist.toFixed(0) : '--',
-      avgConsumption: avgConsumption != null ? avgConsumption.toFixed(2) : null,
-      avgPerKm: avgPerKm != null ? avgPerKm.toFixed(3) : null,
-    }
-
-    // 明细：按里程升序，第 i 条相对前一条计算单次油耗 + 每公里花费
-    const records = valid.map((r, i) => {
-      let dist = null, consumption = null, perKm = null
-      if (i > 0) {
-        const prev = valid[i - 1]
-        dist = r.odometer - prev.odometer
-        if (dist > 0) {
-          consumption = r.fuel_liters != null ? r.fuel_liters / dist * 100 : null
-          perKm = r.amount / dist
-        }
-      }
-      return {
-        id: r.id,
-        date: r.date,
-        dateLabel: fmtDate(r.date),
-        amount: r.amount.toFixed(2),
-        liters: r.fuel_liters != null ? r.fuel_liters.toFixed(2) : '--',
-        odometer: r.odometer,
-        dist: (dist != null && dist > 0) ? dist.toFixed(0) : null,
-        consumption: consumption != null ? consumption.toFixed(2) : null,
-        perKm: perKm != null ? perKm.toFixed(3) : null,
-        note: r.note || '',
-        vehicleName: vName[r.vehicle_id] || '',
-        isFirst: i === 0,
-      }
-    })
-
-    // 每月油费小计（含无里程记录，按 date 月份分组）
-    const monthMap = {}
-    tx.forEach(t => {
-      const m = (t.date || '').slice(0, 7)
-      if (!m) return
-      monthMap[m] = (monthMap[m] || 0) + Number(t.amount)
-    })
-    const monthlyStats = Object.entries(monthMap)
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([month, amount]) => {
-        const p = month.split('-')
-        return { month, monthLabel: `${p[0]}年${parseInt(p[1])}月`, amount: amount.toFixed(2) }
-      })
-
-    this.setData({ loading: false, summary, records, monthlyStats })
   },
 
   goLogin() {
