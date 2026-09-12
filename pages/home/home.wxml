@@ -76,6 +76,7 @@
 </view>
 </view>
 <view class="header-right">
+<text class="fuel-btn" bindtap="goFuel">⛽ 油耗</text>
 <text class="export-btn" bindtap="handleExport">📤 导出</text>
 </view>
 </view>

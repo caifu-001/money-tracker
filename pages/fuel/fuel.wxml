@@ -1,0 +1,102 @@
+<view class="page">
+
+<!-- 未登录 -->
+<view wx:if="{{isGuest}}" class="guest-tip">
+  <text class="guest-title">⛽ 油耗统计</text>
+  <text class="guest-desc">登录后可查看爱车油耗</text>
+  <button class="login-btn" bindtap="goLogin">登录</button>
+</view>
+
+<!-- 已登录 -->
+<block wx:else>
+  <!-- 车辆切换 -->
+  <view class="vehicle-tabs" wx:if="{{vehicleOptions.length > 1}}">
+    <picker range="{{vehicleOptions}}" value="{{vehicleIndex}}" bindchange="onVehicleChange">
+      <view class="vehicle-picker">
+        <text class="vehicle-picker-name">{{vehicleOptions[vehicleIndex]}}</text>
+        <text class="vehicle-picker-arrow">▾</text>
+      </view>
+    </picker>
+  </view>
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-wrap"><text class="loading">加载中...</text></view>
+
+  <!-- 无数据 -->
+  <view wx:elif="{{!hasData}}" class="empty-wrap">
+    <text class="empty-icon">⛽</text>
+    <text class="empty-title">还没有加油记录</text>
+    <text class="empty-desc">在首页记一笔「油费」，填写升数和里程即可开始统计</text>
+  </view>
+
+  <!-- 数据 -->
+  <block wx:else>
+    <!-- 汇总卡片 -->
+    <view class="summary-card">
+      <view class="summary-main">
+        <view class="summary-item">
+          <text class="summary-label">平均油耗</text>
+          <text class="summary-value">{{summary.avgConsumption || '--'}}<text class="summary-unit" wx:if="{{summary.avgConsumption}}">L/100km</text></text>
+        </view>
+        <view class="summary-item">
+          <text class="summary-label">每公里花费</text>
+          <text class="summary-value">{{summary.avgPerKm || '--'}}<text class="summary-unit" wx:if="{{summary.avgPerKm}}">元/km</text></text>
+        </view>
+      </view>
+      <view class="summary-grid">
+        <view class="summary-cell">
+          <text class="cell-value">{{summary.count}}</text>
+          <text class="cell-label">加油次数</text>
+        </view>
+        <view class="summary-cell">
+          <text class="cell-value">{{summary.totalLiters}}</text>
+          <text class="cell-label">累计升数(L)</text>
+        </view>
+        <view class="summary-cell">
+          <text class="cell-value">{{summary.totalDist}}</text>
+          <text class="cell-label">累计里程(km)</text>
+        </view>
+        <view class="summary-cell">
+          <text class="cell-value">{{summary.totalAmount}}</text>
+          <text class="cell-label">累计油费(元)</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 每月油费小计 -->
+    <view class="section" wx:if="{{monthlyStats.length > 0}}">
+      <text class="section-title">每月油费小计</text>
+      <view class="month-row" wx:for="{{monthlyStats}}" wx:key="month">
+        <text class="month-name">{{item.monthLabel}}</text>
+        <text class="month-amount">¥{{item.amount}}</text>
+      </view>
+    </view>
+
+    <!-- 加油明细 -->
+    <view class="section">
+      <text class="section-title">加油明细（按里程升序）</text>
+      <view class="record" wx:for="{{records}}" wx:key="id">
+        <view class="record-head">
+          <text class="record-date">{{item.dateLabel}}</text>
+          <text class="record-vehicle" wx:if="{{item.vehicleName}}">{{item.vehicleName}}</text>
+          <text class="record-amount">¥{{item.amount}}</text>
+        </view>
+        <view class="record-body">
+          <text class="record-meta">⛽ {{item.liters}}L · 📟 {{item.odometer}}km</text>
+          <text class="record-note" wx:if="{{item.note}}">{{item.note}}</text>
+        </view>
+        <view class="record-calc">
+          <text wx:if="{{item.isFirst}}" class="record-first">首笔记录，下次加油后算油耗</text>
+          <block wx:elif="{{item.dist}}">
+            <text class="calc-tag">本段 {{item.dist}}km</text>
+            <text class="calc-tag" wx:if="{{item.consumption}}">油耗 {{item.consumption}}L/100km</text>
+            <text class="calc-tag" wx:if="{{item.perKm}}">{{item.perKm}}元/km</text>
+          </block>
+          <text wx:else class="record-first">里程未增加，无法计算</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</block>
+
+</view>

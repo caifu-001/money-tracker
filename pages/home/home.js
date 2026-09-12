@@ -336,6 +336,11 @@ Page({
     wx.navigateTo({ url: '/pages/ledgers/ledgers' })
   },
 
+  // 跳转油耗统计页
+  goFuel() {
+    wx.navigateTo({ url: '/pages/fuel/fuel' })
+  },
+
   // 微信静默登录（首页游客模式专用）
   async tryWechatLogin() {
     const { SUPABASE_URL } = require('../../utils/supabase')

@@ -9,6 +9,7 @@
     "pages/ledgers/ledgers",
     "pages/admin/admin",
     "pages/export/export",
+    "pages/fuel/fuel",
     "pages/privacy/privacy",
     "pages/agreement/agreement",
     "pages/settings/settings"
