@@ -132,7 +132,7 @@
     <view class="tx-icon {{item.type}}">{{item.categoryIcon}}</view>
     <view class="tx-info">
       <text class="tx-cat">{{item.category}}<text class="tx-reimburse-badge" wx:if="{{item.is_reimbursable}}">{{item.reimbursement_status==='pending'?'🧾待报销':'✅已到账'}}</text></text>
-      <text class="tx-date">{{item.dateLabel}}{{item.paymentDisplay?" · "+item.paymentDisplay:""}}{{item.note?" · "+item.note:""}}<text class="tx-recorder" wx:if="{{showRecorder && item.recorderName}}"> · {{item.recorderName}}</text></text>
+      <text class="tx-date">{{item.dateLabel}}{{item.paymentDisplay?" · "+item.paymentDisplay:""}}{{item.fuelInfo?" · "+item.fuelInfo:""}}{{item.note?" · "+item.note:""}}<text class="tx-recorder" wx:if="{{showRecorder && item.recorderName}}"> · {{item.recorderName}}</text></text>
     </view>
     <view class="tx-right">
       <text class="tx-amount {{item.type}}">{{item.type==='income'?"+":"-"}}{{item.amountStr}}</text>
@@ -219,6 +219,29 @@
 </view>
 </view>
 <input class="note-input" placeholder="添加备注（可选）" value="{{qaNote}}" bindinput="onNoteInput"/>
+<!-- 油耗：仅油费分类显示 -->
+<view class="fuel-fields" wx:if="{{qaType==='expense' && qaCategory==='油费'}}">
+<view class="fuel-row">
+<picker range="{{qaVehicles}}" range-key="name" value="{{qaVehicleIndex}}" bindchange="onQaVehicleChange">
+<view class="fuel-vehicle">
+<text class="fuel-label">🚗 车辆</text>
+<text class="fuel-value">{{qaVehicles[qaVehicleIndex].name || '选择车辆'}}</text>
+</view>
+</picker>
+<text class="fuel-add-vehicle" catchtap="addVehicle">＋</text>
+</view>
+<view class="fuel-row">
+<view class="fuel-input-group">
+<text class="fuel-label">⛽ 加油升数</text>
+<input class="fuel-input" type="digit" value="{{qaFuelLiters}}" bindinput="onQaFuelLitersInput" placeholder="L"/>
+</view>
+<view class="fuel-input-group">
+<text class="fuel-label">📟 里程表读数</text>
+<input class="fuel-input" type="digit" value="{{qaOdometer}}" bindinput="onQaOdometerInput" placeholder="km"/>
+</view>
+</view>
+<text class="fuel-hint">填升数+里程，自动算本次油耗（L/100km）</text>
+</view>
 <view class="pay-row">
 <view class="pay-item {{qaPaymentMethod===item.id?'selected':''}}" wx:for="{{paymentMethods}}" wx:key="id" bindtap="onQaPaymentChange" data-id="{{item.id}}">
 <text class="pay-icon">{{item.icon}}</text>
@@ -278,6 +301,29 @@
 </view>
 </view>
 <input class="note-input" placeholder="备注" value="{{editNote}}" bindinput="onEditNoteInput"/>
+<!-- 油耗：仅油费分类显示 -->
+<view class="fuel-fields" wx:if="{{editType==='expense' && editCategory==='油费'}}">
+<view class="fuel-row">
+<picker range="{{editVehicles}}" range-key="name" value="{{editVehicleIndex}}" bindchange="onEditVehicleChange">
+<view class="fuel-vehicle">
+<text class="fuel-label">🚗 车辆</text>
+<text class="fuel-value">{{editVehicles[editVehicleIndex].name || '选择车辆'}}</text>
+</view>
+</picker>
+<text class="fuel-add-vehicle" catchtap="addVehicle">＋</text>
+</view>
+<view class="fuel-row">
+<view class="fuel-input-group">
+<text class="fuel-label">⛽ 加油升数</text>
+<input class="fuel-input" type="digit" value="{{editFuelLiters}}" bindinput="onEditFuelLitersInput" placeholder="L"/>
+</view>
+<view class="fuel-input-group">
+<text class="fuel-label">📟 里程表读数</text>
+<input class="fuel-input" type="digit" value="{{editOdometer}}" bindinput="onEditOdometerInput" placeholder="km"/>
+</view>
+</view>
+<text class="fuel-hint">填升数+里程，自动算本次油耗（L/100km）</text>
+</view>
 <view class="pay-row">
 <view class="pay-item {{editPaymentMethod===item.id?'selected':''}}" wx:for="{{paymentMethods}}" wx:key="id" bindtap="onEditPaymentChange" data-id="{{item.id}}">
 <text class="pay-icon">{{item.icon}}</text>

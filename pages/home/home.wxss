@@ -333,6 +333,18 @@ page { background: #f0f2f7; }
 /* 备注输入 */
 .note-input { background: #f9fafb; border: 3rpx solid #e5e7eb; border-radius: 24rpx; padding: 24rpx 28rpx; font-size: 28rpx; width: calc(100% - 80rpx); margin: 0 40rpx 24rpx; box-sizing: border-box; min-height: 80rpx; line-height: 1.6; }
 
+/* 油耗字段 */
+.fuel-fields { margin: 0 40rpx 24rpx; padding: 20rpx 24rpx; background: #f8fafc; border: 3rpx dashed #cbd5e1; border-radius: 24rpx; }
+.fuel-row { display: flex; gap: 16rpx; margin-bottom: 16rpx; }
+.fuel-row:last-of-type { margin-bottom: 8rpx; }
+.fuel-vehicle { display: flex; align-items: center; justify-content: space-between; padding: 16rpx 20rpx; background: white; border: 3rpx solid #e5e7eb; border-radius: 16rpx; width: 100%; box-sizing: border-box; }
+.fuel-input-group { flex: 1; }
+.fuel-label { font-size: 22rpx; font-weight: 600; color: #6b7280; margin-bottom: 6rpx; display: block; }
+.fuel-value { font-size: 26rpx; color: #1f2937; }
+.fuel-input { background: white; border: 3rpx solid #e5e7eb; border-radius: 16rpx; padding: 14rpx 20rpx; font-size: 26rpx; }
+.fuel-hint { display: block; font-size: 20rpx; color: #9ca3af; margin-top: 4rpx; }
+.fuel-add-vehicle { width: 64rpx; height: 64rpx; line-height: 60rpx; text-align: center; font-size: 36rpx; color: #6366f1; background: white; border: 3rpx dashed #6366f1; border-radius: 16rpx; flex-shrink: 0; }
+
 /* 提交按钮 */
 .submit-btn {
   margin: 0 40rpx 40rpx;

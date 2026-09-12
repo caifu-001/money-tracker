@@ -67,12 +67,16 @@ Page({
     qaExpandedKey: null, subCats: [], qaSubExpandedKey: null, subSubCats: [],
     currentCats: [],
     qaPaymentMethod: 'cash',
+    // 油耗（油费分类专用）
+    qaVehicles: [], qaVehicleIndex: 0, qaFuelLiters: '', qaOdometer: '',
     // 编辑弹窗
     showEdit: false, editTx: null,
     editType: 'expense', editAmount: '', editCategory: '', editNote: '', editDate: '', editLoading: false, editReimbursable: false,
     editCats: [],
     editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [],
     editPaymentMethod: 'cash',
+    // 油耗（编辑）
+    editVehicles: [], editVehicleIndex: 0, editFuelLiters: '', editOdometer: '',
     // 类别树
     catTree: [],
     catFreq: {},  // 分类使用频次 {name: count}
@@ -308,7 +312,11 @@ Page({
       editCats, editPaymentMethod: tx.payment_method || 'cash',
       editReimbursable: !!tx.is_reimbursable,
       editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [],
+      editVehicles: [], editVehicleIndex: 0,
+      editFuelLiters: tx.fuel_liters != null ? String(tx.fuel_liters) : '',
+      editOdometer: tx.odometer != null ? String(tx.odometer) : '',
     })
+    this.loadVehiclesForEdit(tx.vehicle_id)
   },
 
   // 游客点击登录（邮箱方式）
@@ -575,7 +583,10 @@ Page({
       dateLabel: this.formatDate(t.date, t.created_at),
       canEdit: user.role === 'admin' || t.user_id === user.id,
       recorderName: userNameMap[t.user_id] || '',
-      paymentDisplay: PM_DISPLAY[t.payment_method] || '现金'
+      paymentDisplay: PM_DISPLAY[t.payment_method] || '现金',
+      fuelInfo: (t.fuel_liters != null || t.odometer != null)
+        ? `⛽${t.fuel_liters != null ? t.fuel_liters + 'L' : ''}${t.odometer != null ? ' ' + t.odometer + 'km' : ''}${t.fuel_consumption != null ? ' · 油耗' + t.fuel_consumption + 'L/100km' : ''}`
+        : ''
     }))
     const totalIncome  = txs.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0)
     const totalExpense = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0)
@@ -832,13 +843,15 @@ Page({
     this.setData({
       showQuickAdd: true, qaType: 'expense', qaAmount: '', qaCategory: '', qaNote: '',
       qaDate: bjToday(),
-      qaExpandedKey: null, subCats: [], qaPaymentMethod: 'cash', qaReimbursable: false
+      qaExpandedKey: null, subCats: [], qaPaymentMethod: 'cash', qaReimbursable: false,
+      qaVehicles: [], qaVehicleIndex: 0, qaFuelLiters: '', qaOdometer: ''
     })
+    this.loadVehicles()
   },
   closeQuickAdd() { this.setData({ showQuickAdd: false }) },
   setQaType(e) {
     const type = e.currentTarget.dataset.type
-    this.setData({ qaType: type, qaCategory: '', qaExpandedKey: null, subCats: [] })
+    this.setData({ qaType: type, qaCategory: '', qaExpandedKey: null, subCats: [], qaFuelLiters: '', qaOdometer: '' })
     this.updateCurrentCats(type)
   },
   onAmountInput(e) { this.setData({ qaAmount: e.detail.value }) },
@@ -846,6 +859,38 @@ Page({
   onQaDateChange(e) { this.setData({ qaDate: e.detail.value }) },
   onQaReimburseTap() { this.setData({ qaReimbursable: !this.data.qaReimbursable }) },
   onQaPaymentChange(e) { this.setData({ qaPaymentMethod: e.currentTarget.dataset.id }) },
+  // 油耗输入
+  onQaFuelLitersInput(e) { this.setData({ qaFuelLiters: e.detail.value }) },
+  onQaOdometerInput(e) { this.setData({ qaOdometer: e.detail.value }) },
+  onQaVehicleChange(e) { this.setData({ qaVehicleIndex: Number(e.detail.value) }) },
+  // 添加车辆（轻量：wx.showModal editable 输入车名）
+  addVehicle() {
+    const ledger = app.globalData.currentLedger
+    if (!ledger || !ledger.id) return
+    wx.showModal({
+      title: '添加车辆',
+      editable: true,
+      placeholderText: '输入车辆名称（如：我的车）',
+      success: async (res) => {
+        if (!res.confirm) return
+        const name = (res.content || '').trim()
+        if (!name) return wx.showToast({ title: '车辆名不能为空', icon: 'none' })
+        const { error } = await supabase.from('vehicles').insert([{ ledger_id: ledger.id, name }])
+        if (error) return wx.showToast({ title: error.message || '添加失败', icon: 'none' })
+        wx.showToast({ title: '已添加', icon: 'success' })
+        this.loadVehicles()
+        if (this.data.showEdit) this.loadVehiclesForEdit()
+      }
+    })
+  },
+
+  // 加载当前账本的车辆列表
+  async loadVehicles() {
+    const ledger = app.globalData.currentLedger
+    if (!ledger || !ledger.id) return
+    const { data } = await supabase.from('vehicles').select('id,name').eq('ledger_id', ledger.id).order('created_at')
+    this.setData({ qaVehicles: data || [] })
+  },
 
   onCatTap(e) {
     const { name, hasChildren } = e.currentTarget.dataset
@@ -883,10 +928,43 @@ Page({
     this.setData({ qaCategory: this.data.qaExpandedKey, qaExpandedKey: null, subCats: [], qaSubExpandedKey: null, subSubCats: [] }) 
   },
 
+  // 判断分类是否为「油费」（叶子分类名）
+  isFuelCategory(category) {
+    return category === '油费'
+  },
+
+  // 计算油耗（L/100km）：本次升数 / (本次里程 - 上次里程) * 100
+  // excludeId：编辑时排除当前记录自身
+  // 返回 { consumption, lastOdometer } 或 null（无法计算）
+  async calcFuelConsumption(vehicleId, odometer, liters, excludeId) {
+    const ledger = app.globalData.currentLedger
+    if (!ledger || !ledger.id) return null
+    // 查该车辆上一次加油记录（有里程的）
+    let q = supabase.from('transactions')
+      .select('id,odometer,created_at')
+      .eq('ledger_id', ledger.id)
+      .eq('category', '油费')
+      .notNull('odometer')
+    if (vehicleId) q = q.eq('vehicle_id', vehicleId)
+    if (excludeId) q = q.neq('id', excludeId)
+    const { data } = await q.order('odometer', { ascending: false }).limit(1)
+    const last = data && data[0]
+    if (!last || last.odometer == null) return null
+    const lastOdo = Number(last.odometer)
+    const curOdo = Number(odometer)
+    const curLiters = Number(liters)
+    if (isNaN(lastOdo) || isNaN(curOdo) || isNaN(curLiters)) return null
+    const dist = curOdo - lastOdo
+    if (dist <= 0) return null  // 里程未增加，无法计算
+    const consumption = (curLiters / dist) * 100
+    return { consumption: Math.round(consumption * 100) / 100, lastOdometer: lastOdo }
+  },
+
   async handleQuickAdd() {
     // 游客点保存时检查登录
     if (!this.requireLogin('保存')) return
-    const { currentLedger, user, qaType, qaAmount, qaCategory, qaNote, qaDate, qaPaymentMethod, qaReimbursable } = this.data
+    const { currentLedger, user, qaType, qaAmount, qaCategory, qaNote, qaDate, qaPaymentMethod, qaReimbursable,
+      qaVehicles, qaVehicleIndex, qaFuelLiters, qaOdometer } = this.data
     if (!qaAmount || !qaCategory) return wx.showToast({ title: '请填写金额并选择分类', icon: 'none' })
     this.setData({ qaLoading: true })
     try {
@@ -900,10 +978,33 @@ Page({
         record.is_reimbursable = true
         record.reimbursement_status = 'pending'
       }
+      // 油费：附加升数/里程/车辆，并自动算油耗
+      let fuelConsumption = null
+      let calcNote = ''
+      if (qaType === 'expense' && this.isFuelCategory(qaCategory)) {
+        const vehicleId = qaVehicles[qaVehicleIndex] ? qaVehicles[qaVehicleIndex].id : null
+        if (vehicleId) record.vehicle_id = vehicleId
+        if (qaFuelLiters !== '' && qaFuelLiters != null) record.fuel_liters = Number(qaFuelLiters)
+        if (qaOdometer !== '' && qaOdometer != null) record.odometer = Number(qaOdometer)
+        // 只有升数和里程都填了才尝试计算
+        if (record.fuel_liters != null && record.odometer != null) {
+          const calc = await this.calcFuelConsumption(vehicleId, record.odometer, record.fuel_liters)
+          if (calc) {
+            record.fuel_consumption = calc.consumption
+            fuelConsumption = calc.consumption
+          } else {
+            calcNote = '（首次加油，下次加油后自动算油耗）'
+          }
+        }
+      }
       const { error } = await supabase.from('transactions').insert([record])
       if (error) throw new Error(error.message)
       this.setData({ showQuickAdd: false })
-      wx.showToast({ title: '记账成功', icon: 'success' })
+      if (fuelConsumption != null) {
+        wx.showToast({ title: `记账成功，油耗 ${fuelConsumption}L/100km`, icon: 'none', duration: 2500 })
+      } else {
+        wx.showToast({ title: '记账成功' + calcNote, icon: 'success', duration: 2500 })
+      }
       this.loadData()
     } catch(e) {
       wx.showToast({ title: e.message || '记账失败', icon: 'none' })
@@ -934,7 +1035,21 @@ Page({
       editCats, editPaymentMethod: tx.payment_method || 'cash',
       editReimbursable: !!tx.is_reimbursable,
       editExpandedKey: null, editSubCats: [], editSubExpandedKey: null, editSubSubCats: [],
+      editVehicles: [], editVehicleIndex: 0,
+      editFuelLiters: tx.fuel_liters != null ? String(tx.fuel_liters) : '',
+      editOdometer: tx.odometer != null ? String(tx.odometer) : '',
     })
+    // 加载车辆并回填车辆选中项
+    this.loadVehiclesForEdit(tx.vehicle_id)
+  },
+  // 加载车辆用于编辑弹窗
+  async loadVehiclesForEdit(vehicleId) {
+    const ledger = app.globalData.currentLedger
+    if (!ledger || !ledger.id) return
+    const { data } = await supabase.from('vehicles').select('id,name').eq('ledger_id', ledger.id).order('created_at')
+    const vehicles = data || []
+    const idx = vehicleId ? vehicles.findIndex(v => v.id === vehicleId) : -1
+    this.setData({ editVehicles: vehicles, editVehicleIndex: idx >= 0 ? idx : 0 })
   },
   closeEdit() { this.setData({ showEdit: false }) },
   setEditType(e) {
@@ -981,9 +1096,14 @@ Page({
   },
   onEditPaymentChange(e) { this.setData({ editPaymentMethod: e.currentTarget.dataset.id }) },
   onEditReimburseTap() { this.setData({ editReimbursable: !this.data.editReimbursable }) },
+  // 编辑油耗输入
+  onEditFuelLitersInput(e) { this.setData({ editFuelLiters: e.detail.value }) },
+  onEditOdometerInput(e) { this.setData({ editOdometer: e.detail.value }) },
+  onEditVehicleChange(e) { this.setData({ editVehicleIndex: Number(e.detail.value) }) },
 
   async handleEdit() {
-    const { editTx, editType, editAmount, editCategory, editNote, editDate, editPaymentMethod, editReimbursable } = this.data
+    const { editTx, editType, editAmount, editCategory, editNote, editDate, editPaymentMethod, editReimbursable,
+      editVehicles, editVehicleIndex, editFuelLiters, editOdometer } = this.data
     if (!editAmount || !editCategory) return wx.showToast({ title: '请填写金额并选择分类', icon: 'none' })
     this.setData({ editLoading: true })
     try {
@@ -999,10 +1119,40 @@ Page({
         update.is_reimbursable = false
         update.reimbursement_status = null
       }
+      // 油费：附加升数/里程/车辆，重算油耗
+      let fuelConsumption = null
+      let calcNote = ''
+      if (editType === 'expense' && this.isFuelCategory(editCategory)) {
+        const vehicleId = editVehicles[editVehicleIndex] ? editVehicles[editVehicleIndex].id : null
+        update.vehicle_id = vehicleId
+        update.fuel_liters = (editFuelLiters !== '' && editFuelLiters != null) ? Number(editFuelLiters) : null
+        update.odometer = (editOdometer !== '' && editOdometer != null) ? Number(editOdometer) : null
+        if (update.fuel_liters != null && update.odometer != null) {
+          const calc = await this.calcFuelConsumption(vehicleId, update.odometer, update.fuel_liters, editTx.id)
+          if (calc) {
+            update.fuel_consumption = calc.consumption
+            fuelConsumption = calc.consumption
+          } else {
+            calcNote = '（无法计算油耗）'
+          }
+        } else {
+          update.fuel_consumption = null
+        }
+      } else {
+        // 改成非油费分类：清空油耗字段
+        update.vehicle_id = null
+        update.fuel_liters = null
+        update.odometer = null
+        update.fuel_consumption = null
+      }
       const { error } = await supabase.from('transactions').update(update).eq('id', editTx.id)
       if (error) throw new Error(error.message)
       this.setData({ showEdit: false })
-      wx.showToast({ title: '修改成功', icon: 'success' })
+      if (fuelConsumption != null) {
+        wx.showToast({ title: `已保存，油耗 ${fuelConsumption}L/100km`, icon: 'none', duration: 2500 })
+      } else {
+        wx.showToast({ title: '修改成功' + calcNote, icon: 'success', duration: 2500 })
+      }
       this.loadData()
     } catch(e) {
       wx.showToast({ title: e.message || '修改失败', icon: 'none' })
