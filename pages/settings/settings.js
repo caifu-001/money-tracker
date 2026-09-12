@@ -118,14 +118,9 @@ Page({
           content: '删除后无法恢复，请确认是否继续',
           success: async (r) => {
             if (!r.confirm) return
-            // 删除用户所有数据
-            const { user, currentLedger } = app.globalData
-            await supabase.from('transactions').delete().eq('user_id', user.id)
-            await supabase.from('categories').delete().eq('ledger_id', currentLedger.id)
-            await supabase.from('budgets').delete().eq('ledger_id', currentLedger.id)
-            await supabase.from('ledger_members').delete().eq('user_id', user.id)
-            await supabase.from('ledgers').delete().eq('owner_id', user.id)
-            await supabase.from('users').delete().eq('id', user.id)
+            // 软删除：走 user_self_delete RPC（数据保留 15 天，可自助恢复）
+            const { user } = app.globalData
+            await supabase.rpc('user_self_delete', {})
             await supabase.auth.signOut()
             app.logout()
           }

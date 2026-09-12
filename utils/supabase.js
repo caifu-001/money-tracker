@@ -192,6 +192,21 @@ const supabase = {
       res = await doCall()
     }
     return { data: res.data, statusCode: res.statusCode }
+  },
+  // 调用 RPC 并强制带 anon key（登录前调用，此时可能无 token）
+  async rpcAuth(fnName, params = {}) {
+    const res = await wxRequest('POST', SUPABASE_URL + '/rest/v1/rpc/' + fnName, params, {
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+    })
+    return { data: res.data, statusCode: res.statusCode }
+  },
+  // 注册：走 register_user RPC（后端强制 role=user / status 由 auto_approve 决定）
+  async registerUser(p_name, p_email, p_openid) {
+    return this.rpc('register_user', { p_name, p_email, p_openid })
+  },
+  // 登录前 name→email 反查（RLS 收紧后，anon 无法直查 users）
+  async findUserEmailByName(name) {
+    return this.rpcAuth('find_user_email_by_name', { p_name: name })
   }
 }
 module.exports = { supabase, SUPABASE_URL, SUPABASE_ANON_KEY, refreshToken, deriveWechatPassword }

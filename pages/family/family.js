@@ -40,9 +40,9 @@ Page({
     }
     this.setData({ loading: true, currentLedger })
 
-    // 查询成员列表
+    // 查询成员列表（仅取 name，不暴露 email）
     const { data: members, error } = await supabase.from('ledger_members')
-      .select('id, role, users(id, name, email)')
+      .select('id, role, users(id, name)')
       .eq('ledger_id', currentLedger.id)
 
     // 邀请码 = 账本ID前8位大写

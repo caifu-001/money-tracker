@@ -48,7 +48,7 @@ Page({
   // 重新从数据库查最新 role
   async refreshUserRole(cachedUser, cb) {
     try {
-      const { data, error } = await supabase.from('users').select('*').eq('id', cachedUser.id).single()
+      const { data, error } = await supabase.from('users').select('id,email,name,role,status').eq('id', cachedUser.id).single()
       if (data) {
         const freshUser = { ...cachedUser, role: data.role, name: data.name, email: data.email }
         wx.setStorageSync('user_info', freshUser)  // 更新缓存
@@ -83,7 +83,7 @@ Page({
           header: {
             'Content-Type': 'application/json',
             'apikey': SUPABASE_ANON_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+            'Authorization': 'Bearer ' + (wx.getStorageSync('sb_access_token') || SUPABASE_ANON_KEY)
           },
           data: { p_user_id: userId },
           success: () => resolve(),
@@ -125,10 +125,16 @@ Page({
         return
       }
 
-      // 用 openid 查用户
-      const { data: userList } = await supabase.from('users').select('*').eq('wechat_openid', result.openid).limit(1)
-      if (userList && userList.length > 0) {
-        const userData = userList[0]
+      // RLS 收紧后，前端无法用 openid 直查 users；改用 wechat-auth 返回的用户信息
+      // （Edge Function 用 service_role 查，返回 email/name/role/status）
+      if (result.email) {
+        const userData = {
+          id: '',
+          email: result.email,
+          name: result.name,
+          role: result.role,
+          status: result.status,
+        }
         if (userData.status === 'pending') {
           wx.showToast({ title: '账号审核中，请稍后再试', icon: 'none' })
           return
@@ -138,12 +144,13 @@ Page({
           return
         }
         // 用派生密码走标准密码登录，换取 access token（后续 RPC 写操作才能拿到 auth.uid()）
-        const { error: loginErr } = await supabase.auth.signInWithWechat(result.openid, userData.email)
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithWechat(result.openid, userData.email)
         if (loginErr) {
           console.error('[tryWechatLogin] 换取 token 失败:', loginErr)
           wx.showToast({ title: '登录失败，请重试', icon: 'none' })
           return
         }
+        userData.id = loginData?.user?.id || ''
         if (userData.status === 'deleted') {
           // 15天内登录 → 自动恢复（此时已有 access token）
           const restoreRes = await supabase.rpc('user_self_restore', {})
@@ -215,21 +222,15 @@ Page({
       })
       if (authError) throw authError
 
-      // 创建 users 表记录，绑定 openid，检查自动通过设置
-      const settingRes = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
-      console.log('[handleWechatRegister] app_settings查询结果:', JSON.stringify(settingRes))
-      const autoApprove = settingRes.data && settingRes.data.value === 'true'
-      console.log('[handleWechatRegister] autoApprove=', autoApprove)
-      const userStatus = autoApprove ? 'active' : 'pending'
-      const userRecord = {
-        id: authData.user.id,
-        email,
-        name,
-        role: 'user',
-        status: userStatus,
-        wechat_openid: wechatOpenid
-      }
-      await supabase.from('users').insert([userRecord])
+      // signUp 后换 access token（register_user 依赖 auth.uid()）
+      const { error: loginErr } = await supabase.auth.signInWithWechat(wechatOpenid, email)
+      if (loginErr) throw new Error('注册后登录失败，请重试')
+
+      // 创建 users 表记录（走 register_user RPC，后端强制 role=user / status 由 auto_approve 决定）
+      const regRes = await supabase.registerUser(name, email, wechatOpenid)
+      console.log('[handleWechatRegister] register_user 结果:', JSON.stringify(regRes))
+      const userStatus = regRes.data || 'pending'
+      const autoApprove = userStatus === 'active'
 
       this.setData({ loading: false, showWechatRegister: false })
       if (autoApprove) {
@@ -419,10 +420,10 @@ Page({
       // 登录：支持邮箱或用户名
       let email = loginId
       if (!loginId.includes('@')) {
-        // 用户名方式：先查用户表获取邮箱
-        const { data: userList } = await supabase.from('users').select('email,name').eq('name', loginId.toLowerCase()).limit(1)
-        if (userList && userList.length > 0) {
-          email = userList[0].email
+        // 用户名方式：走 RPC 反查邮箱（RLS 收紧后，anon 无法直查 users）
+        const r = await supabase.findUserEmailByName(loginId)
+        if (r.statusCode === 200 && r.data) {
+          email = r.data
         } else {
           // 查不到才用默认后缀（兼容旧账号）
           email = loginId.toLowerCase() + '@qianji.app'
@@ -431,14 +432,16 @@ Page({
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw new Error(error.message)
 
-      const { data: userData } = await supabase.from('users').select('*').eq('id', data.user.id).single()
+      // 登录后（已有 token）才能查自己
+      const { data: userData } = await supabase.from('users').select('id,email,name,role,status,deleted_at').eq('id', data.user.id).single()
       if (!userData) {
-        // 新用户，检查自动通过设置
-        const settingRes = await supabase.from('app_settings').select('value').eq('key', 'auto_approve').single()
-        const autoApprove = settingRes.data && settingRes.data.value === 'true'
-        console.log('[handleLogin] 新用户 app_settings:', JSON.stringify(settingRes), 'autoApprove=', autoApprove)
-        const initStatus = autoApprove ? 'active' : 'pending'
-        await supabase.from('users').insert([{ id: data.user.id, email: data.user.email, name: (data.user.user_metadata && data.user.user_metadata.name) || loginId, role: 'user', status: initStatus }])
+        // 新用户：走 register_user RPC（后端决定 role/status）
+        const regRes = await supabase.registerUser(
+          (data.user.user_metadata && data.user.user_metadata.name) || loginId,
+          data.user.email,
+          null
+        )
+        const initStatus = regRes.data || 'pending'
         if (initStatus === 'pending') {
           await supabase.auth.signOut()
           throw new Error('账号正在等待管理员审核，请耐心等待')

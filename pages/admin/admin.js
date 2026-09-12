@@ -238,7 +238,7 @@ Page({
     if (!user) return
     try {
       // 查询用户详细信息
-      const { data: profile } = await supabase.from('users').select('*').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('users').select('id,email,name,role,status,created_at,last_login,deleted_at').eq('id', user.id).single()
       // 查询账本数量
       const { data: ledgers } = await supabase.from('ledgers').select('id').eq('owner_id', user.id)
       const ledgerCount = (ledgers || []).length
