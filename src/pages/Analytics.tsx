@@ -6,13 +6,18 @@ import {
   Tooltip, LineChart, Line, CartesianGrid, Legend
 } from 'recharts'
 import { Search } from 'lucide-react'
+import {
+  isLoan, statAmount, loanLabel, counterpartyOf,
+  groupByCounterparty, openLoanOverview, loanDirectionOf,
+} from '../lib/loans'
 
 const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#84cc16','#06b6d4','#a855f7','#f97316','#14b8a6']
 
 const fmtYuan = (v: any) => `¥${Number(v ?? 0).toFixed(2)}`
 const fmtInt = (v: any) => `¥${Number(v ?? 0)}`
+const fmtMoney = (v: number) => `¥${Number(v ?? 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}`
 
-type ViewType = 'expense' | 'income' | 'trend' | 'payment'
+type ViewType = 'expense' | 'income' | 'trend' | 'payment' | 'loan'
 type PresetRange = 'month' | 'quarter' | 'year' | 'custom'
 
 const today = new Date()
@@ -38,6 +43,9 @@ export function Analytics() {
   const [totalExpense, setTotalExpense] = useState(0)
   const [totalIncome, setTotalIncome] = useState(0)
   const [rawData, setRawData] = useState<any[]>([])
+  // 借款是「存量」概念（张三欠我多少与所选月份无关），因此单独查全量
+  const [loanTx, setLoanTx] = useState<any[]>([])
+  const [expandedParty, setExpandedParty] = useState<string | null>(null)
   const [statMode, setStatMode] = useState<'detail' | 'summary'>('detail')
   const [userCategories, setUserCategories] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -69,22 +77,33 @@ export function Analytics() {
       if (!data) { setIsLoading(false); return }
 
       setRawData(data)
+      // 借款不计入收支：先剔除，避免分类里冒出 0 值条目、笔数虚高
+      const billable = data.filter((t: any) => !isLoan(t))
       const exp: Record<string, number> = {}, inc: Record<string, number> = {}, trend: Record<string, any> = {}, pay: Record<string, number> = {}
       let tE = 0, tI = 0
-      data.forEach((t: any) => {
-        if (t.type === 'expense') { exp[t.category] = (exp[t.category] || 0) + t.amount; tE += t.amount }
-        else { inc[t.category] = (inc[t.category] || 0) + t.amount; tI += t.amount }
+      billable.forEach((t: any) => {
+        const amt = statAmount(t)
+        if (t.type === 'expense') { exp[t.category] = (exp[t.category] || 0) + amt; tE += amt }
+        else { inc[t.category] = (inc[t.category] || 0) + amt; tI += amt }
         if (!trend[t.date]) trend[t.date] = { date: t.date, income: 0, expense: 0 }
-        if (t.type === 'expense') trend[t.date].expense += t.amount
-        else trend[t.date].income += t.amount
+        if (t.type === 'expense') trend[t.date].expense += amt
+        else trend[t.date].income += amt
         const pm = t.payment_method || 'other'
-        pay[pm] = (pay[pm] || 0) + t.amount
+        pay[pm] = (pay[pm] || 0) + amt
       })
       setTotalExpense(tE); setTotalIncome(tI)
       setExpenseData(Object.entries(exp).map(([name, value]) => ({ name, value: Number(value) })).sort((a, b) => b.value - a.value))
       setIncomeData(Object.entries(inc).map(([name, value]) => ({ name, value: Number(value) })).sort((a, b) => b.value - a.value))
       setTrendData(Object.entries(trend).sort(([a], [b]) => a.localeCompare(b)).map(([date, v]: any) => ({ date: date.slice(5), ...v })))
       setPaymentData(Object.entries(pay).map(([name, value]) => ({ name, value: Number(value) })).sort((a, b) => b.value - a.value))
+
+      // 借款全量（不受时间范围限制）
+      let lq = supabase.from('transactions').select('*')
+        .eq('ledger_id', currentLedger.id).eq('is_loan', true)
+        .order('date', { ascending: false })
+      if (user?.role !== 'admin') lq = lq.eq('user_id', user?.id)
+      const { data: loanData } = await lq
+      setLoanTx(loanData || [])
     } catch (e) { console.error(e) }
     finally { setIsLoading(false) }
   }
@@ -127,7 +146,7 @@ export function Analytics() {
   const expenseChartData = useMemo(() => {
     if (statMode === 'detail' || Object.keys(catToTopMap).length === 0) return filteredExp
     const agg: Record<string, number> = {}
-    rawData.filter((t: any) => t.type === 'expense').forEach((t: any) => {
+    rawData.filter((t: any) => t.type === 'expense' && !isLoan(t)).forEach((t: any) => {
       const key = t.category || '其他'
       const mapped = catToTopMap[key]
       const topKey = mapped ? mapped.topName : key
@@ -143,7 +162,7 @@ export function Analytics() {
   const expenseSubDetails = useMemo(() => {
     if (statMode === 'detail' || Object.keys(catToTopMap).length === 0) return {} as Record<string, any[]>
     const subs: Record<string, Record<string, number>> = {}
-    rawData.filter((t: any) => t.type === 'expense').forEach((t: any) => {
+    rawData.filter((t: any) => t.type === 'expense' && !isLoan(t)).forEach((t: any) => {
       const key = t.category || '其他'
       const mapped = catToTopMap[key]
       const topKey = mapped ? mapped.topName : key
@@ -159,6 +178,10 @@ export function Analytics() {
     })
     return result
   }, [statMode, rawData, catToTopMap])
+
+  // 借款：按对方汇总 + 未结清概览（全量数据，不随月份变化）
+  const loanGroups = useMemo(() => groupByCounterparty(loanTx), [loanTx])
+  const loanOv = useMemo(() => openLoanOverview(loanTx), [loanTx])
 
   const Card = ({ children, style }: any) => (
     <div style={{ background: 'white', borderRadius: 20, padding: 20, boxShadow: '0 2px 16px rgba(0,0,0,0.06)', marginBottom: 16, ...style }}>
@@ -187,10 +210,11 @@ export function Analytics() {
       </div>
 
       {/* 图表类型切换 */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {([['expense','💸 支出'],['income','💰 收入'],['trend','📈 趋势'],['payment','💳 支付']] as [ViewType, string][]).map(([v, label]) => (
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+        {([['expense','💸 支出'],['income','💰 收入'],['trend','📈 趋势'],['payment','💳 支付'],['loan','🤝 借款']] as [ViewType, string][]).map(([v, label]) => (
           <button key={v} onClick={() => setViewType(v)}
-            style={{ flex: 1, padding: '10px 0', borderRadius: 14, border: 'none', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s',
+            style={{ flex: 1, padding: '10px 2px', borderRadius: 12, border: 'none', fontWeight: 700, fontSize: 12, cursor: 'pointer', transition: 'all 0.15s',
+              whiteSpace: 'nowrap',
               background: viewType === v ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'white',
               color: viewType === v ? 'white' : '#6b7280',
               boxShadow: viewType === v ? '0 4px 16px rgba(99,102,241,0.3)' : '0 1px 4px rgba(0,0,0,0.06)' }}>
@@ -223,7 +247,8 @@ export function Analytics() {
         )}
       </Card>
 
-      {/* 类别筛选（所有视图都显示） */}
+      {/* 类别筛选（借款视图不适用） */}
+      {viewType !== 'loan' && (
       <Card>
         <p style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>🔍 筛选类别</p>
         {/* 文本搜索框 - 用 input 配合 inputMode 避免 iOS 输入法关闭问题 */}
@@ -276,18 +301,50 @@ export function Analytics() {
           </p>
         )}
       </Card>
+      )}
 
       {/* 统计卡片 */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
-        <StatCard label="💸 支出合计" amount={totalExpense} color="#ef4444" bg="#fef2f2"/>
-        <StatCard label="💰 收入合计" amount={totalIncome} color="#22c55e" bg="#f0fdf4"/>
-      </div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
-        <StatCard label="📊 结余" amount={totalIncome - totalExpense}
-          color={(totalIncome - totalExpense) >= 0 ? '#22c55e' : '#ef4444'}
-          bg={(totalIncome - totalExpense) >= 0 ? '#f0fdf4' : '#fef2f2'}/>
-        <StatCard label="📝 笔数" amount={rawData.length} color="#6366f1" bg="#eef2ff"/>
-      </div>
+      {viewType === 'loan' ? (
+        <>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+            <div style={{ flex: 1, background: '#f0fdfa', borderRadius: 16, padding: '16px 18px' }}>
+              <p style={{ color: '#0f766e', fontSize: 12, marginBottom: 6, fontWeight: 600 }}>📤 待收回</p>
+              <p style={{ color: '#0d9488', fontSize: 21, fontWeight: 800 }}>{fmtMoney(loanOv.receivable)}</p>
+              <p style={{ color: '#5eead4', fontSize: 11, marginTop: 2 }}>别人欠我</p>
+            </div>
+            <div style={{ flex: 1, background: '#fff7ed', borderRadius: 16, padding: '16px 18px' }}>
+              <p style={{ color: '#9a3412', fontSize: 12, marginBottom: 6, fontWeight: 600 }}>📥 待偿还</p>
+              <p style={{ color: '#ea580c', fontSize: 21, fontWeight: 800 }}>{fmtMoney(loanOv.payable)}</p>
+              <p style={{ color: '#fdba74', fontSize: 11, marginTop: 2 }}>我欠别人</p>
+            </div>
+          </div>
+          <div style={{ background: 'white', borderRadius: 16, padding: '14px 18px', marginBottom: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ color: '#9ca3af', fontSize: 12 }}>净头寸</p>
+              <p style={{ color: loanOv.net > 0 ? '#ea580c' : loanOv.net < 0 ? '#0d9488' : '#9ca3af', fontSize: 20, fontWeight: 800, marginTop: 2 }}>
+                {loanOv.net === 0 ? '已结清' : `${loanOv.net > 0 ? '净欠人' : '净应收'} ${fmtMoney(Math.abs(loanOv.net))}`}
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ color: '#9ca3af', fontSize: 12 }}>涉及</p>
+              <p style={{ color: '#6366f1', fontSize: 20, fontWeight: 800, marginTop: 2 }}>{loanOv.partyCount} 人</p>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
+            <StatCard label="💸 支出合计" amount={totalExpense} color="#ef4444" bg="#fef2f2"/>
+            <StatCard label="💰 收入合计" amount={totalIncome} color="#22c55e" bg="#f0fdf4"/>
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 4 }}>
+            <StatCard label="📊 结余" amount={totalIncome - totalExpense}
+              color={(totalIncome - totalExpense) >= 0 ? '#22c55e' : '#ef4444'}
+              bg={(totalIncome - totalExpense) >= 0 ? '#f0fdf4' : '#fef2f2'}/>
+            <StatCard label="📝 笔数" amount={rawData.filter(t => !isLoan(t)).length} color="#6366f1" bg="#eef2ff"/>
+          </div>
+        </>
+      )}
 
       {isLoading ? (
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
@@ -486,6 +543,84 @@ export function Analytics() {
                 </>
               )}
             </Card>
+          )}
+
+          {/* 借款视图：借出/借入是债权债务，不计入收支 */}
+          {viewType === 'loan' && (
+            <>
+              <Card>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+                  <p style={{ fontWeight: 700, fontSize: 16, color: '#1f2937' }}>🤝 按对方结算</p>
+                  <p style={{ fontSize: 11, color: '#9ca3af' }}>全量 · 不受时间范围影响</p>
+                </div>
+                {loanGroups.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <p style={{ fontSize: 40, marginBottom: 8 }}>🤝</p>
+                    <p style={{ color: '#9ca3af', fontSize: 14 }}>还没有借款记录</p>
+                    <p style={{ color: '#d1d5db', fontSize: 12, marginTop: 6 }}>记账时勾选「🤝 借款」即可</p>
+                  </div>
+                ) : loanGroups.map(g => {
+                  const receivableSide = g.net < 0       // 净额为负 → 对方欠我
+                  const accent = !g.open ? '#9ca3af' : receivableSide ? '#0d9488' : '#ea580c'
+                  const isExpanded = expandedParty === g.party
+                  return (
+                    <div key={g.party} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <div onClick={() => setExpandedParty(isExpanded ? null : g.party)}
+                        style={{ display: 'flex', alignItems: 'center', padding: '14px 0', cursor: 'pointer', gap: 12 }}>
+                        <div style={{
+                          width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                          background: !g.open ? '#f9fafb' : receivableSide ? '#f0fdfa' : '#fff7ed',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                        }}>
+                          {receivableSide ? '📤' : '📥'}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: '#1f2937', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.party}</p>
+                          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                            {g.count} 笔{g.lastDate ? ` · 最近 ${g.lastDate}` : ''}
+                          </p>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <p style={{ fontSize: 15, fontWeight: 800, color: accent }}>
+                            {!g.open ? '已结清' : `${receivableSide ? '待收回' : '待偿还'} ${fmtMoney(Math.abs(g.net))}`}
+                          </p>
+                          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
+                            {receivableSide ? '对方欠我' : '我欠对方'} {isExpanded ? '▲' : '▼'}
+                          </p>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div style={{ padding: '0 0 12px 52px' }}>
+                          {g.items.map((t: any) => {
+                            const out = loanDirectionOf(t) === 'out'
+                            return (
+                              <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '7px 0', fontSize: 12, borderBottom: '1px dashed #f9fafb' }}>
+                                <span style={{ color: '#6b7280', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {t.date} · {loanLabel(t)}{t.note ? ` · ${t.note}` : ''}
+                                </span>
+                                <span style={{ color: out ? '#0d9488' : '#ea580c', fontWeight: 700, flexShrink: 0 }}>
+                                  {out ? '-' : '+'}¥{Number(t.amount || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                          <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+                            借出 {fmtMoney(g.lendTotal)} · 借入 {fmtMoney(g.borrowTotal)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </Card>
+
+              <div style={{ background: '#faf5ff', border: '1.5px solid #e9d5ff', borderRadius: 16, padding: '14px 16px', marginBottom: 16 }}>
+                <p style={{ fontSize: 12, color: '#7e22ce', lineHeight: 1.7 }}>
+                  💡 借款不计入收支与预算。对方还钱时，用相反方向再记一笔（借给张三 500 → 收到还款就记「收入 + 借款」500），
+                  两笔自动抵消，净额归零即视为结清，不需要手动配对。
+                </p>
+              </div>
+            </>
           )}
         </>
       )}

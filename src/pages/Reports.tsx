@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { transactionService } from '../lib/services'
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
+import { isLoan, statAmount } from '../lib/loans'
 
 export function Reports() {
   const { currentLedger } = useAppStore()
@@ -33,10 +34,13 @@ export function Reports() {
         const dailyTotals: Record<string, { income: number; expense: number }> = {}
 
         transactions?.forEach((t: any) => {
+          // 借款不计收支：跳过，避免虚增分类与日汇总
+          if (isLoan(t)) return
+          const amt = statAmount(t)
           if (t.type === 'expense') {
-            expenseByCategory[t.category] = (expenseByCategory[t.category] || 0) + t.amount
+            expenseByCategory[t.category] = (expenseByCategory[t.category] || 0) + amt
           } else {
-            incomeByCategory[t.category] = (incomeByCategory[t.category] || 0) + t.amount
+            incomeByCategory[t.category] = (incomeByCategory[t.category] || 0) + amt
           }
 
           // 按日期统计
@@ -44,9 +48,9 @@ export function Reports() {
             dailyTotals[t.date] = { income: 0, expense: 0 }
           }
           if (t.type === 'income') {
-            dailyTotals[t.date].income += t.amount
+            dailyTotals[t.date].income += amt
           } else {
-            dailyTotals[t.date].expense += t.amount
+            dailyTotals[t.date].expense += amt
           }
         })
 

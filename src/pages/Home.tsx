@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
 import { Trash2, Users, ArrowDownCircle, ArrowUpCircle, Pencil, ChevronDown, Download } from 'lucide-react'
 import { EditTransaction } from '../components/EditTransaction'
+import {
+  isLoan, loanLabel, counterpartyOf, statAmount, openLoanOverview,
+} from '../lib/loans'
 
 export function Home() {
   const { currentLedger, user, transactions, setTransactions } = useAppStore()
@@ -12,7 +15,8 @@ export function Home() {
   const [ledgerUsers, setLedgerUsers] = useState<any[]>([])
   const [showUserFilter, setShowUserFilter] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<any>(null)
-  const [showReimbursableOnly, setShowReimbursableOnly] = useState(false)
+  // 列表筛选：全部 / 待报销 / 借款（互斥，避免两个开关同时生效互相干扰）
+  const [listFilter, setListFilter] = useState<'all' | 'reimbursable' | 'loan'>('all')
   const [reimburseLoading, setReimburseLoading] = useState(false)
 
   useEffect(() => {
@@ -85,7 +89,7 @@ export function Home() {
         alert('暂无账目可导出')
         return
       }
-      const headers = ['日期', '时间', '类型', '金额', '类别', '子类别', '备注', '支付方式', '记账人']
+      const headers = ['日期', '时间', '类型', '金额', '类别', '子类别', '备注', '支付方式', '借款', '借款对象', '记账人']
       const rows = data.map((t: any) => [
         t.date || '',
         t.created_at ? t.created_at.slice(11, 16) : '',
@@ -95,6 +99,8 @@ export function Home() {
         t.sub_category || '',
         t.note || '',
         t.payment_method || '',
+        isLoan(t) ? loanLabel(t) : '',
+        isLoan(t) ? counterpartyOf(t) : '',
         t.user_id === user?.id ? (user?.name || user?.email || '我') : ''
       ])
       const csvContent = [headers, ...rows]
@@ -122,15 +128,21 @@ export function Home() {
     setEditingTransaction(null)
   }
 
-  const totalIncome  = transactions.reduce((s, t) => t.type === 'income' ? s + t.amount : s, 0)
-  const totalExpense = transactions.reduce((s, t) => t.type === 'expense' ? s + t.amount : s, 0)
+  // 借款不计入收支：statAmount 对借款返回 0，天然被排除
+  const totalIncome  = transactions.reduce((s, t) => t.type === 'income' ? s + statAmount(t) : s, 0)
+  const totalExpense = transactions.reduce((s, t) => t.type === 'expense' ? s + statAmount(t) : s, 0)
   const balance = totalIncome - totalExpense
   const pendingReimburseTotal = transactions
     .filter(t => t.is_reimbursable && t.reimbursement_status === 'pending' && t.type === 'expense')
-    .reduce((s, t) => s + t.amount, 0)
-  const displayTransactions = showReimbursableOnly
+    .reduce((s, t) => s + statAmount(t), 0)
+  // 借款未结清概览（本月口径，与上方收支同一数据源）
+  const loanOv = openLoanOverview(transactions)
+  const loanTransactions = transactions.filter(t => isLoan(t))
+  const displayTransactions = listFilter === 'reimbursable'
     ? transactions.filter(t => t.is_reimbursable && t.reimbursement_status === 'pending')
-    : transactions
+    : listFilter === 'loan'
+      ? loanTransactions
+      : transactions
   const currentViewUser = selectedUserId ? ledgerUsers.find(u => u.id === selectedUserId) : user
   const todayStr = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
 
@@ -229,6 +241,21 @@ export function Home() {
                 <span style={{ color: '#fbbf24', fontSize: 18, fontWeight: 800 }}>¥{pendingReimburseTotal.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</span>
               </div>
             )}
+
+            {/* 借款未结清提醒（净额法：还钱反向记一笔即自动抵消） */}
+            {loanOv.open && (
+              <div style={{ marginTop: 10, background: 'linear-gradient(135deg, rgba(13,148,136,0.25), rgba(6,182,212,0.15))', borderRadius: 14, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backdropFilter: 'blur(8px)', gap: 8 }}>
+                <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>🤝 {loanOv.partyCount} 人未结清</span>
+                <span style={{ display: 'flex', gap: 10, fontSize: 13, fontWeight: 800, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {loanOv.receivable > 0 && (
+                    <span style={{ color: '#5eead4' }}>待收回 ¥{loanOv.receivable.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</span>
+                  )}
+                  {loanOv.payable > 0 && (
+                    <span style={{ color: '#fdba74' }}>待偿还 ¥{loanOv.payable.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -240,33 +267,60 @@ export function Home() {
               <p style={{ fontWeight: 700, fontSize: 16, color: '#1f2937' }}>📋 记账记录</p>
               <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>共 {displayTransactions.length} 笔</p>
             </div>
-            <button onClick={() => setShowReimbursableOnly(!showReimbursableOnly)}
-              style={{
-                padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                background: showReimbursableOnly ? '#fef3c7' : '#f3f4f6',
-                color: showReimbursableOnly ? '#d97706' : '#9ca3af'
-              }}>
-              🧾 待报销
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setListFilter(listFilter === 'loan' ? 'all' : 'loan')}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  background: listFilter === 'loan' ? '#ccfbf1' : '#f3f4f6',
+                  color: listFilter === 'loan' ? '#0f766e' : '#9ca3af'
+                }}>
+                🤝 借款{loanTransactions.length > 0 ? ` ${loanTransactions.length}` : ''}
+              </button>
+              <button onClick={() => setListFilter(listFilter === 'reimbursable' ? 'all' : 'reimbursable')}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  background: listFilter === 'reimbursable' ? '#fef3c7' : '#f3f4f6',
+                  color: listFilter === 'reimbursable' ? '#d97706' : '#9ca3af'
+                }}>
+                🧾 待报销
+              </button>
+            </div>
           </div>
 
           {isLoading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
               <div style={{ width: 32, height: 32, border: '3px solid #e5e7eb', borderTopColor: '#6366f1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
             </div>
-          ) : transactions.length === 0 ? (
+          ) : displayTransactions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '56px 24px' }}>
-              <div style={{ fontSize: 52, marginBottom: 12 }}>📝</div>
-              <p style={{ color: '#9ca3af', fontWeight: 600, fontSize: 15 }}>本月暂无账目</p>
-              <p style={{ color: '#d1d5db', fontSize: 13, marginTop: 6 }}>点击右下角按钮开始记账</p>
+              <div style={{ fontSize: 52, marginBottom: 12 }}>
+                {listFilter === 'loan' ? '🤝' : listFilter === 'reimbursable' ? '🧾' : '📝'}
+              </div>
+              <p style={{ color: '#9ca3af', fontWeight: 600, fontSize: 15 }}>
+                {listFilter === 'loan' ? '本月没有借款记录'
+                  : listFilter === 'reimbursable' ? '本月没有待报销账目'
+                  : '本月暂无账目'}
+              </p>
+              <p style={{ color: '#d1d5db', fontSize: 13, marginTop: 6 }}>
+                {listFilter === 'all' ? '点击右下角按钮开始记账' : '当前处于筛选状态'}
+              </p>
+              {listFilter !== 'all' && (
+                <button onClick={() => setListFilter('all')}
+                  style={{ marginTop: 14, padding: '8px 20px', borderRadius: 20, border: 'none', background: '#eef2ff', color: '#6366f1', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  显示全部账目
+                </button>
+              )}
             </div>
           ) : (
             <div>
               {displayTransactions.map((transaction, idx) => {
                 const isExpense = transaction.type === 'expense'
-                const amountColor = isExpense ? '#ef4444' : '#22c55e'
-                const iconBg = isExpense ? '#fef2f2' : '#f0fdf4'
-                const rowBorder = idx < transactions.length - 1 ? '1px solid #f9fafb' : 'none'
+                const txIsLoan = isLoan(transaction)
+                // 借款用独立配色：借出（应收）青 / 借入（应付）橙
+                const loanAccent = isExpense ? '#0d9488' : '#ea580c'
+                const amountColor = txIsLoan ? loanAccent : (isExpense ? '#ef4444' : '#22c55e')
+                const iconBg = txIsLoan ? '#f0fdfa' : (isExpense ? '#fef2f2' : '#f0fdf4')
+                const rowBorder = idx < displayTransactions.length - 1 ? '1px solid #f9fafb' : 'none'
                 const canEdit = user?.role === 'admin' || transaction.user_id === user?.id
 
                 return (
@@ -285,7 +339,18 @@ export function Home() {
                     {/* 信息 */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {transaction.category}
+                        {txIsLoan
+                          ? `${loanLabel(transaction)}${counterpartyOf(transaction) ? ' · ' + counterpartyOf(transaction) : ''}`
+                          : transaction.category}
+                        {txIsLoan && (
+                          <span style={{
+                            marginLeft: 6, padding: '1px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                            background: isExpense ? '#ccfbf1' : '#ffedd5',
+                            color: isExpense ? '#115e59' : '#9a3412'
+                          }}>
+                            🤝{loanLabel(transaction)}
+                          </span>
+                        )}
                         {transaction.is_reimbursable && (
                           <span style={{
                             marginLeft: 6, padding: '1px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600,

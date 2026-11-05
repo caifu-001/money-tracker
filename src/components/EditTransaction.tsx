@@ -3,6 +3,7 @@ import { X, Check, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAppStore } from '../store/appStore'
 import { DEFAULT_CATEGORIES } from '../lib/categories'
+import { LOAN_CATEGORY, isLoan as isLoanTx } from '../lib/loans'
 
 const PAYMENT_METHODS = [
   { id: 'cash',    name: '现金',   icon: '💵', color: '#16a34a' },
@@ -41,6 +42,9 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
   const [note, setNote] = useState(transaction.note || '')
   const [paymentMethod, setPaymentMethod] = useState(transaction.payment_method || 'cash')
   const [isReimbursable, setIsReimbursable] = useState(!!transaction.is_reimbursable)
+  // 借款：编辑时回填，允许反转标记或改对方
+  const [isLoan, setIsLoan] = useState(isLoanTx(transaction))
+  const [counterparty, setCounterparty] = useState(transaction.loan_counterparty || '')
   const [date, setDate] = useState(transaction.date)
   const [isLoading, setIsLoading] = useState(false)
   const [catTree, setCatTree] = useState<any[]>([])
@@ -94,18 +98,23 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!amount || !categoryId) { alert('请填写金额并选择分类'); return }
+    if (!amount) { alert('请填写金额'); return }
+    if (isLoan && !counterparty.trim()) { alert('请填写借款对象（借给谁 / 向谁借）'); return }
+    if (!isLoan && !categoryId) { alert('请填写金额并选择分类'); return }
+    const finalCategory = isLoan ? LOAN_CATEGORY[type === 'expense' ? 'out' : 'in'] : category
     setIsLoading(true)
     setErrorMsg('')
     try {
       const updatePayload = {
         amount: parseFloat(amount),
         type,
-        category,
+        category: finalCategory,
         note,
         payment_method: paymentMethod,
         date,
-        ...(type === 'expense' && isReimbursable
+        is_loan: isLoan,
+        loan_counterparty: isLoan ? counterparty.trim() : null,
+        ...(type === 'expense' && isReimbursable && !isLoan
           ? { is_reimbursable: true, reimbursement_status: transaction.reimbursement_status || 'pending' }
           : { is_reimbursable: false, reimbursement_status: null }),
       }
@@ -134,6 +143,8 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
 
   const isExpense = type === 'expense'
   const accent = isExpense ? '#ef4444' : '#22c55e'
+  const loanAccent = isExpense ? '#0d9488' : '#ea580c'
+  const canSubmit = !!amount && (isLoan ? !!counterparty.trim() : !!categoryId)
 
   return (
     <>
@@ -186,8 +197,8 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
               </div>
             </div>
 
-            {/* 分类 */}
-            <div>
+            {/* 分类（借款模式下隐藏） */}
+            <div style={{ display: isLoan ? 'none' : 'block' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <p style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>📂 分类 {!categoryId && <span style={{ color: '#ef4444', fontSize: 12 }}>*必选</span>}</p>
               </div>
@@ -283,8 +294,48 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
                 style={{ width: '100%', padding: '14px 16px', borderRadius: 14, border: '1.5px solid transparent', background: '#f9f9f9', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}/>
             </div>
 
-            {/* 报销 */}
-            {type === 'expense' && (
+            {/* 借款开关 */}
+            <div onClick={() => {
+                const next = !isLoan
+                setIsLoan(next)
+                if (next) setIsReimbursable(false)
+                else { setCategory(''); setCategoryId('') }
+              }}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderRadius: 14,
+                background: isLoan ? '#f0fdfa' : '#f9fafb',
+                border: `1.5px solid ${isLoan ? '#5eead4' : '#e5e7eb'}`, cursor: 'pointer' }}>
+              <div style={{ width: 24, height: 24, borderRadius: 6, border: `2px solid ${isLoan ? loanAccent : '#d1d5db'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isLoan ? loanAccent : 'white', flexShrink: 0, marginTop: 1 }}>
+                {isLoan && <span style={{ color: 'white', fontSize: 14, fontWeight: 700 }}>✓</span>}
+              </div>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 14, fontWeight: 600, color: isLoan ? loanAccent : '#374151' }}>
+                  🤝 借款（{isExpense ? '借出给' : '向人借'}）
+                </span>
+                <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, lineHeight: 1.4 }}>
+                  不计入收支与预算，只记录欠款与资金流。
+                </p>
+              </div>
+            </div>
+
+            {/* 借款对象 */}
+            {isLoan && (
+              <div style={{ background: '#f0fdfa', borderRadius: 16, padding: 16, border: '1.5px solid #99f6e4' }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#0f766e', marginBottom: 10 }}>
+                  {isExpense ? '📤 借给谁' : '📥 向谁借'} <span style={{ color: '#ef4444', fontSize: 12, fontWeight: 500 }}>*必填</span>
+                </p>
+                <input
+                  type="text"
+                  value={counterparty}
+                  onChange={e => setCounterparty(e.target.value)}
+                  placeholder={isExpense ? '例如：张三' : '例如：李四 / 招商银行'}
+                  maxLength={20}
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #ccfbf1', background: 'white', fontSize: 15, fontWeight: 600, color: '#111', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                />
+              </div>
+            )}
+
+            {/* 报销（借款时不适用） */}
+            {type === 'expense' && !isLoan && (
               <div onClick={() => setIsReimbursable(!isReimbursable)}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: '#fffbeb', border: '1.5px solid #fde68a', cursor: 'pointer' }}>
                 <div style={{ width: 24, height: 24, borderRadius: 6, border: `2px solid ${isReimbursable ? '#d97706' : '#d1d5db'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isReimbursable ? '#d97706' : 'white', flexShrink: 0 }}>
@@ -295,10 +346,10 @@ export function EditTransaction({ transaction, onClose, onSuccess }: EditTransac
             )}
 
             {/* 提交 */}
-            <button type="submit" disabled={isLoading || !amount || !categoryId}
+            <button type="submit" disabled={isLoading || !canSubmit}
               style={{ width: '100%', padding: 16, borderRadius: 16, border: 'none', fontWeight: 800, fontSize: 16, color: 'white', cursor: 'pointer',
-                background: (!amount || !categoryId || isLoading) ? '#d1d5db' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                boxShadow: (!amount || !categoryId || isLoading) ? 'none' : '0 8px 24px rgba(99,102,241,0.35)',
+                background: (!canSubmit || isLoading) ? '#d1d5db' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                boxShadow: (!canSubmit || isLoading) ? 'none' : '0 8px 24px rgba(99,102,241,0.35)',
               }}>
               {isLoading ? '⏳ 保存中...' : '✓ 保存修改'}
             </button>

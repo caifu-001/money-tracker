@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import { supabase } from '../lib/supabase'
 import { TrendingUp, TrendingDown } from 'lucide-react'
+import { isLoan, statAmount } from '../lib/loans'
 
 const MONTHS = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
 
@@ -48,11 +49,12 @@ export function Budget() {
 
   useEffect(() => { load() }, [currentLedger, year, month])
 
-  // 按类别聚合支出
+  // 按类别聚合支出（借款不是消费，不进预算）
   const spentByCategory: Record<string, number> = {}
   transactions.forEach((t: any) => {
+    if (isLoan(t)) return
     const cat = t.category?.split('›').pop()?.trim() || t.category || '其他'
-    spentByCategory[cat] = (spentByCategory[cat] || 0) + t.amount
+    spentByCategory[cat] = (spentByCategory[cat] || 0) + statAmount(t)
   })
   console.log('Spent by category:', spentByCategory, 'transactions:', transactions.length)
 

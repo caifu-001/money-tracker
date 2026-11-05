@@ -3,6 +3,7 @@ import { X, Check, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAppStore } from '../store/appStore'
 import { DEFAULT_CATEGORIES } from '../lib/categories'
+import { LOAN_CATEGORY, recentCounterparties } from '../lib/loans'
 
 const PAYMENT_METHODS = [
   { id: 'cash',    name: '现金',   icon: '💵', color: '#16a34a' },
@@ -27,7 +28,7 @@ function buildTree(data: any[]): any[] {
 }
 
 export function QuickAdd() {
-  const { isQuickAddOpen, closeQuickAdd, currentLedger, user } = useAppStore()
+  const { isQuickAddOpen, closeQuickAdd, currentLedger, user, transactions } = useAppStore()
   const [type, setType] = useState<'income' | 'expense'>('expense')
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
@@ -35,6 +36,9 @@ export function QuickAdd() {
   const [note, setNote] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [isReimbursable, setIsReimbursable] = useState(false)
+  // 借款：开启后隐藏分类，改填对方；金额仍计入资金流但不计收支
+  const [isLoan, setIsLoan] = useState(false)
+  const [counterparty, setCounterparty] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [catTree, setCatTree] = useState<any[]>([])
   const [selectedParent, setSelectedParent] = useState<any>(null)
@@ -48,6 +52,7 @@ export function QuickAdd() {
     if (!isQuickAddOpen) {
       setCategory(''); setCategoryId('')
       setSelectedParent(null); setSelectedSub(null); setType('expense')
+      setIsLoan(false); setCounterparty(''); setIsReimbursable(false)
       const t = new Date(); const y = t.getFullYear(); const m = String(t.getMonth()+1).padStart(2,'0'); const d = String(t.getDate()).padStart(2,'0')
       setDate(''+y+'-'+m+'-'+d)
     }
@@ -120,7 +125,11 @@ export function QuickAdd() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!amount || !categoryId) { alert('请填写金额并选择分类'); return }
+    if (!amount) { alert('请填写金额'); return }
+    if (isLoan && !counterparty.trim()) { alert('请填写借款对象（借给谁 / 向谁借）'); return }
+    if (!isLoan && !categoryId) { alert('请填写金额并选择分类'); return }
+    // 借款不选分类，直接写死可识别的分类名
+    const finalCategory = isLoan ? LOAN_CATEGORY[type === 'expense' ? 'out' : 'in'] : category
     setIsLoading(true); setErrorMsg('')
     try {
       const result = await supabase.from('transactions').insert({
@@ -128,11 +137,13 @@ export function QuickAdd() {
         user_id: user?.id,
         amount: parseFloat(amount),
         type,
-        category,
+        category: finalCategory,
         note,
         date,
         payment_method: paymentMethod,
-        ...(type === 'expense' && isReimbursable ? { is_reimbursable: true, reimbursement_status: 'pending' } : {}),
+        is_loan: isLoan,
+        loan_counterparty: isLoan ? counterparty.trim() : null,
+        ...(type === 'expense' && isReimbursable && !isLoan ? { is_reimbursable: true, reimbursement_status: 'pending' } : {}),
       })
 
       if (result.error) {
@@ -141,6 +152,7 @@ export function QuickAdd() {
       }
 
       setAmount(''); setCategory(''); setCategoryId(''); setNote(''); setPaymentMethod('cash')
+      setIsLoan(false); setCounterparty(''); setIsReimbursable(false)
       handleSuccess()
     } catch (err: any) {
       const msg = err?.message || String(err) || '记账失败'
@@ -156,6 +168,11 @@ export function QuickAdd() {
   const isExpense = type === 'expense'
   const accent = isExpense ? '#ef4444' : '#22c55e'
   const accentBg = isExpense ? '#fef2f2' : '#f0fdf4'
+  // 借款用独立配色：借出（应收）青 / 借入（应付）橙，与收支红绿区分开
+  const loanAccent = isExpense ? '#0d9488' : '#ea580c'
+  const loanParties = recentCounterparties(transactions, 6)
+  // 借款只要金额 + 对方；普通记账要金额 + 分类
+  const canSubmit = !!amount && (isLoan ? !!counterparty.trim() : !!categoryId)
 
   return (
     <>
@@ -227,8 +244,8 @@ export function QuickAdd() {
               style={{ flex: 1, fontSize: 14, border: 'none', background: 'transparent', outline: 'none', color: '#374151', fontFamily: 'inherit' }}/>
           </div>
 
-          {/* 分类 */}
-          <div>
+          {/* 分类（借款模式下隐藏，改为填写对方） */}
+          <div style={{ display: isLoan ? 'none' : 'block' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>
                 📂 分类 {!category && <span style={{ color: '#ef4444', fontSize: 12, fontWeight: 500 }}>*必选</span>}
@@ -348,8 +365,55 @@ export function QuickAdd() {
             placeholder="✏️ 添加备注（可选，50字内）" maxLength={50}
             style={{ width: '100%', padding: '14px 16px', borderRadius: 14, border: '1.5px solid transparent', background: '#f9f9f9', fontSize: 14, outline: 'none', boxSizing: 'border-box' }}/>
 
-          {/* 报销 */}
-          {type === 'expense' && (
+          {/* 借款开关：借出/借入是债权债务，不计入收支 */}
+          <div onClick={() => { const next = !isLoan; setIsLoan(next); if (next) setIsReimbursable(false) }}
+            style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 16px', borderRadius: 14,
+              background: isLoan ? '#f0fdfa' : '#f9fafb',
+              border: `1.5px solid ${isLoan ? '#5eead4' : '#e5e7eb'}`, cursor: 'pointer' }}>
+            <div style={{ width: 24, height: 24, borderRadius: 6, border: `2px solid ${isLoan ? loanAccent : '#d1d5db'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isLoan ? loanAccent : 'white', flexShrink: 0, marginTop: 1 }}>
+              {isLoan && <span style={{ color: 'white', fontSize: 14, fontWeight: 700 }}>✓</span>}
+            </div>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: isLoan ? loanAccent : '#374151' }}>
+                🤝 借款（{isExpense ? '借出给' : '向人借'}）
+              </span>
+              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, lineHeight: 1.4 }}>
+                不计入收支与预算，只记录欠款与资金流。对方还钱时反向记一笔自动结清。
+              </p>
+            </div>
+          </div>
+
+          {/* 借款对象 */}
+          {isLoan && (
+            <div style={{ background: '#f0fdfa', borderRadius: 16, padding: 16, border: '1.5px solid #99f6e4' }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#0f766e', marginBottom: 10 }}>
+                {isExpense ? '📤 借给谁' : '📥 向谁借'} <span style={{ color: '#ef4444', fontSize: 12, fontWeight: 500 }}>*必填</span>
+              </p>
+              <input
+                type="text"
+                value={counterparty}
+                onChange={e => setCounterparty(e.target.value)}
+                placeholder={isExpense ? '例如：张三' : '例如：李四 / 招商银行'}
+                maxLength={20}
+                style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #ccfbf1', background: 'white', fontSize: 15, fontWeight: 600, color: '#111', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              />
+              {loanParties.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {loanParties.map(p => (
+                    <button key={p} type="button" onClick={() => setCounterparty(p)}
+                      style={{ padding: '5px 12px', borderRadius: 14, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        background: counterparty === p ? loanAccent : '#ccfbf1',
+                        color: counterparty === p ? 'white' : '#0f766e' }}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 报销（借款时不适用） */}
+          {type === 'expense' && !isLoan && (
             <div onClick={() => setIsReimbursable(!isReimbursable)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 14, background: '#fffbeb', border: '1.5px solid #fde68a', cursor: 'pointer' }}>
               <div style={{ width: 24, height: 24, borderRadius: 6, border: `2px solid ${isReimbursable ? '#d97706' : '#d1d5db'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isReimbursable ? '#d97706' : 'white', flexShrink: 0 }}>
@@ -360,16 +424,20 @@ export function QuickAdd() {
           )}
 
           {/* 提交 */}
-          <button type="submit" disabled={isLoading || !amount || !categoryId}
+          <button type="submit" disabled={isLoading || !canSubmit}
             style={{ width: '100%', padding: 15, borderRadius: 16, border: 'none', fontWeight: 800, fontSize: 16, color: 'white', cursor: 'pointer',
-              background: (!amount || !categoryId || isLoading) ? '#d1d5db' : isExpense
-                ? 'linear-gradient(135deg, #ef4444, #f97316)'
+              background: (!canSubmit || isLoading) ? '#d1d5db'
+                : isLoan ? `linear-gradient(135deg, ${loanAccent}, ${isExpense ? '#14b8a6' : '#f97316'})`
+                : isExpense ? 'linear-gradient(135deg, #ef4444, #f97316)'
                 : 'linear-gradient(135deg, #22c55e, #10b981)',
-              boxShadow: (!amount || !categoryId || isLoading) ? 'none' : isExpense
-                ? '0 8px 24px rgba(239,68,68,0.35)'
+              boxShadow: (!canSubmit || isLoading) ? 'none'
+                : isLoan ? `0 8px 24px ${loanAccent}59`
+                : isExpense ? '0 8px 24px rgba(239,68,68,0.35)'
                 : '0 8px 24px rgba(34,197,94,0.35)',
             }}>
-            {isLoading ? '⏳ 保存中...' : `✓ 确认${isExpense ? '支出' : '收入'} ¥${amount || '0.00'}`}
+            {isLoading ? '⏳ 保存中...'
+              : isLoan ? `✓ 确认${isExpense ? '借出' : '借入'} ¥${amount || '0.00'}`
+              : `✓ 确认${isExpense ? '支出' : '收入'} ¥${amount || '0.00'}`}
           </button>
         </form>
 

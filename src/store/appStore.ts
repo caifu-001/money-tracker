@@ -28,6 +28,12 @@ interface Transaction {
   created_at?: string
   is_reimbursable?: boolean
   reimbursement_status?: string | null
+  /** 借款标记：true 表示这条是借出/借入，不计入收支统计 */
+  is_loan?: boolean | null
+  /** 借款对方：张三 / 招商银行 */
+  loan_counterparty?: string | null
+  /** 小程序记的外币账会带本位币金额，Web 端借款汇总优先用它 */
+  base_amount?: number | null
 }
 
 interface AppStore {
