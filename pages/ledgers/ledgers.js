@@ -2,6 +2,13 @@
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
 const { initDefaultCategories } = require('../../utils/categories')
+const { CURRENCY_CODES, CURRENCY_LABELS, DEFAULT_CURRENCY, getLabel } = require('../../utils/currency')
+const { clearRatesCache } = require('../../utils/rates')
+
+function currencyIndexOf(code) {
+  const i = CURRENCY_CODES.indexOf(code || DEFAULT_CURRENCY)
+  return i < 0 ? 0 : i
+}
 
 Page({
   data: {
@@ -18,6 +25,8 @@ Page({
     // 编辑
     editingId: null,
     editName: '',
+    // 本位币
+    currencyLabels: CURRENCY_LABELS,
   },
 
   onLoad() {
@@ -93,6 +102,8 @@ Page({
       if (members) members.forEach(m => sharedSet.add(m.ledger_id))
       allLedgers = allLedgers.map(l => ({
         ...l,
+        base_currency: l.base_currency || DEFAULT_CURRENCY,
+        currencyIndex: currencyIndexOf(l.base_currency),
         isShared: sharedSet.has(l.id),
         displayName: (sharedSet.has(l.id) ? '[共同]' : '') + l.name
       }))
@@ -188,6 +199,38 @@ Page({
   // 获取默认账本ID
   getDefaultId() {
     return wx.getStorageSync('default_ledger_id')
+  },
+
+  // 阻止账本卡片的点击冒泡（币种选择器专用）
+  noop() {},
+
+  // 设置账本本位币：只影响后续聚合口径，历史账单已冻结的汇率金额不重算
+  onLedgerCurrencyChange(e) {
+    const idx = Number(e.currentTarget.dataset.index)
+    const code = CURRENCY_CODES[Number(e.detail.value)]
+    const ledger = this.data.ledgers[idx]
+    if (!ledger || !code || (ledger.base_currency || DEFAULT_CURRENCY) === code) return
+    if (!this.data.user) return wx.showToast({ title: '请先登录', icon: 'none' })
+
+    wx.showModal({
+      title: '修改本位币',
+      content: `将「${ledger.name}」的本位币改为 ${getLabel(code)}？\n\n注意：已记账目的本位币金额不会自动重算，本次只影响新记账目与后续汇率换算。若历史账目本是其他币种，建议另建账本。`,
+      success: async (res) => {
+        if (!res.confirm) return
+        const { error } = await supabase.from('ledgers').update({ base_currency: code }).eq('id', ledger.id)
+        if (error) return wx.showToast({ title: error.message || '修改失败', icon: 'none' })
+        // 同步全局当前账本与默认账本缓存
+        if (app.globalData.currentLedger && app.globalData.currentLedger.id === ledger.id) {
+          app.globalData.currentLedger = { ...app.globalData.currentLedger, base_currency: code }
+        }
+        if (wx.getStorageSync('default_ledger_id') === ledger.id) {
+          wx.setStorageSync('default_ledger_currency', code)
+        }
+        clearRatesCache()   // 本位币变了，汇率缓存作废
+        wx.showToast({ title: '已更新本位币', icon: 'success' })
+        this.loadData()
+      }
+    })
   },
 
   async handleDelete(e) {

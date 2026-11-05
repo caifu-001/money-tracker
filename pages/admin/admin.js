@@ -163,6 +163,9 @@ Page({
   goLedgersPage() {
     wx.navigateTo({ url: '/pages/ledgers/ledgers' })
   },
+  goAccountsPage() {
+    wx.navigateTo({ url: '/pages/accounts/accounts' })
+  },
   toggleCreate() { this.setData({ showCreate: !this.data.showCreate, newLedgerName: '' }) },
   onNewLedgerNameInput(e) { this.setData({ newLedgerName: e.detail.value }) },
   async handleCreateLedger() {

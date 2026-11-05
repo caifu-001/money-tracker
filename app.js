@@ -1,5 +1,7 @@
 // app.js - 全局入口
 const { supabase } = require('./utils/supabase')
+const { resolveBaseCurrency } = require('./utils/currency')
+const { getRateMap } = require('./utils/rates')
 
 App({
   globalData: {
@@ -12,6 +14,21 @@ App({
 
   onLaunch() {
     this.restoreSession()
+    this.prefetchRates()
+  },
+
+  // 静默预热汇率表（本位币非 CNY 或需要记外币时省一次等待）
+  // 失败不影响启动：记账页会按需重试，并有离线参考汇率兜底
+  prefetchRates() {
+    try {
+      const ledger = this.globalData.currentLedger || this.getDefaultLedger()
+      const base = resolveBaseCurrency(ledger)
+      getRateMap(base)
+        .then(res => console.log('[app] 汇率预热完成 base=', base, 'source=', res.source, 'stale=', res.stale))
+        .catch(() => {})
+    } catch (e) {
+      console.warn('[app] 汇率预热跳过', e)
+    }
   },
 
   // 静默恢复登录态 — 老用户秒进，不等任何 DB 请求
@@ -68,6 +85,7 @@ App({
       wx.setStorageSync('default_ledger_name', ledger.name)
       wx.setStorageSync('default_ledger_type', ledger.type)
       wx.setStorageSync('default_ledger_owner', ledger.owner_id)
+      wx.setStorageSync('default_ledger_currency', ledger.base_currency || 'CNY')
     }
   },
 
@@ -78,11 +96,13 @@ App({
       wx.setStorageSync('default_ledger_name', ledger.name)
       wx.setStorageSync('default_ledger_type', ledger.type)
       wx.setStorageSync('default_ledger_owner', ledger.owner_id)
+      wx.setStorageSync('default_ledger_currency', ledger.base_currency || 'CNY')
     } else {
       wx.removeStorageSync('default_ledger_id')
       wx.removeStorageSync('default_ledger_name')
       wx.removeStorageSync('default_ledger_type')
       wx.removeStorageSync('default_ledger_owner')
+      wx.removeStorageSync('default_ledger_currency')
     }
   },
 
@@ -92,8 +112,9 @@ App({
     const name = wx.getStorageSync('default_ledger_name')
     const type = wx.getStorageSync('default_ledger_type')
     const owner_id = wx.getStorageSync('default_ledger_owner')
+    const base_currency = wx.getStorageSync('default_ledger_currency')
     if (id && name) {
-      return { id, name, type, owner_id }
+      return { id, name, type, owner_id, base_currency: base_currency || 'CNY' }
     }
     return null
   },

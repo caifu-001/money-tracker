@@ -231,6 +231,12 @@ page { background: #f0f2f7; }
 /* 加载 / 空状态 */
 .loading, .empty-state { text-align: center; padding: 80rpx 32rpx; color: #9ca3af; font-size: 28rpx; }
 
+/* 筛选后无命中：给一个明确的出口，避免用户以为账目丢了 */
+.filter-empty { display: flex; flex-direction: column; align-items: center; gap: 16rpx; padding: 80rpx 32rpx; }
+.fe-emoji { font-size: 72rpx; }
+.fe-text { font-size: 28rpx; color: #9ca3af; }
+.fe-reset { margin-top: 8rpx; font-size: 24rpx; font-weight: 600; color: #4f46e5; background: #eef2ff; padding: 12rpx 32rpx; border-radius: 40rpx; }
+
 /* ── 账目条目 ───────────────────────────────── */
 .tx-item {
   display: flex; align-items: center;
@@ -257,6 +263,22 @@ page { background: #f0f2f7; }
 .tx-actions { display: flex; gap: 12rpx; }
 .tx-actions text { font-size: 26rpx; color: #6366f1; }
 .tx-actions .tx-delete { color: #dc2626; }
+.tx-convert { font-size: 22rpx; color: #9ca3af; }
+.tx-convert.pending { color: #d97706; }
+
+/* ── 币种选择与换算预览 ─────────────────────── */
+.fx-row {
+  display: flex; align-items: center; gap: 16rpx;
+  padding: 0 40rpx; margin: -16rpx 0 28rpx;
+}
+.fx-pick {
+  display: flex; align-items: center; gap: 6rpx;
+  padding: 8rpx 22rpx; border-radius: 40rpx; background: #f3f4f6;
+}
+.fx-code { font-size: 24rpx; font-weight: 700; color: #374151; }
+.fx-caret { font-size: 20rpx; color: #9ca3af; }
+.fx-preview { flex: 1; font-size: 22rpx; color: #6b7280; text-align: right; }
+.fx-preview.warn { color: #d97706; }
 
 /* ── 悬浮按钮 ───────────────────────────────── */
 .float-btn {
@@ -428,6 +450,70 @@ page { background: #f0f2f7; }
   font-size: 24rpx !important;
 }
 
+/* ── 借款（022）：青色系，与报销琥珀 / 待结算靛蓝区分 ─────── */
+.loan-summary {
+  margin-top: 16rpx; padding: 20rpx 24rpx;
+  background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
+  border: 3rpx solid #99f6e4;
+  border-radius: 20rpx;
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 16rpx;
+}
+.loan-sum-label { font-size: 24rpx; font-weight: 700; color: #115e59; flex-shrink: 0; }
+.loan-sum-right { display: flex; align-items: center; gap: 12rpx; flex-wrap: wrap; justify-content: flex-end; }
+.loan-sum-in { font-size: 22rpx; font-weight: 600; color: #0d9488; }
+.loan-sum-out { font-size: 22rpx; font-weight: 600; color: #b45309; }
+.loan-sum-arrow { font-size: 22rpx; color: #0f766e; }
+
+.reimburse-filter.loan-filter.active { background: #ccfbf1; color: #0f766e; }
+
+.day-loan { font-size: 22rpx; color: #0d9488; font-weight: 600; }
+
+.tx-icon.loan { background: #ccfbf1; }
+.tx-amount.loan { color: #0d9488; }
+.tx-loan-badge {
+  font-size: 20rpx; margin-left: 8rpx;
+  padding: 2rpx 10rpx; border-radius: 10rpx;
+  background: #ccfbf1; color: #115e59;
+}
+
+/* ── 外币待结算 ─────────────────────────────── */
+.pending-summary {
+  margin-top: 16rpx; padding: 20rpx 24rpx;
+  background: #eef2ff; border: 3rpx solid #c7d2fe;
+  border-radius: 20rpx;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.pending-summary text { display: block; }
+.pending-label { font-size: 24rpx; font-weight: 600; color: #3730a3; }
+.pending-right { display: flex; align-items: center; gap: 16rpx; }
+.pending-value { font-size: 30rpx; font-weight: 700; color: #4338ca; }
+.pending-toggle {
+  font-size: 22rpx; padding: 8rpx 20rpx; border-radius: 40rpx;
+  background: #4f46e5; color: #fff; font-weight: 700;
+}
+.tx-pending-badge {
+  font-size: 20rpx; margin-left: 8rpx;
+  padding: 2rpx 10rpx; border-radius: 10rpx;
+  background: #eef2ff; color: #4338ca;
+}
+
+/* 结算校正区（编辑弹窗内） */
+.settle-box {
+  margin: 0 40rpx 24rpx; padding: 24rpx;
+  background: #eef2ff; border: 3rpx solid #c7d2fe; border-radius: 20rpx;
+}
+.settle-head { display: flex; align-items: baseline; gap: 12rpx; margin-bottom: 16rpx; }
+.settle-title { font-size: 26rpx; font-weight: 700; color: #3730a3; }
+.settle-desc { font-size: 22rpx; color: #6366f1; }
+.settle-input-wrap {
+  display: flex; align-items: center; gap: 10rpx;
+  background: #fff; border-radius: 16rpx; padding: 16rpx 24rpx;
+}
+.settle-symbol { font-size: 30rpx; font-weight: 700; color: #4338ca; }
+.settle-input { flex: 1; font-size: 30rpx; color: #1f2937; }
+.settle-hint { display: block; margin-top: 12rpx; font-size: 22rpx; color: #6366f1; }
+
 .reimburse-toggle {
   display: flex; align-items: center; gap: 16rpx;
   margin: 0 40rpx 32rpx;
@@ -451,6 +537,86 @@ page { background: #f0f2f7; }
 .reimburse-toggle-label {
   font-size: 26rpx; color: #92400e; font-weight: 600;
 }
+
+/* ── 借款（022）：青色系，与支出红 / 收入绿 / 转账紫 / 报销琥珀全部区分 ── */
+.loan-toggle {
+  display: flex; align-items: center; gap: 16rpx;
+  margin: 0 40rpx 24rpx;
+  padding: 20rpx 24rpx;
+  background: #f0fdfa; border-radius: 20rpx;
+  border: 3rpx solid #99f6e4;
+}
+.loan-toggle.on { background: #ccfbf1; border-color: #5eead4; }
+.loan-checkbox {
+  width: 44rpx; height: 44rpx;
+  border: 3rpx solid #0d9488;
+  border-radius: 10rpx;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.loan-checkbox.checked { background: #0d9488; }
+.loan-checkbox.checked text { color: white; font-size: 28rpx; font-weight: 700; }
+.loan-toggle-label { font-size: 26rpx; color: #115e59; font-weight: 600; }
+.loan-toggle-sub { font-size: 22rpx; color: #0d9488; font-weight: 400; margin-left: 6rpx; }
+
+.loan-box {
+  margin: 0 40rpx 24rpx;
+  padding: 24rpx;
+  background: #f0fdfa;
+  border: 3rpx solid #99f6e4;
+  border-radius: 20rpx;
+}
+.loan-row { display: flex; align-items: center; gap: 16rpx; }
+.loan-label { width: 120rpx; font-size: 26rpx; color: #115e59; font-weight: 600; flex-shrink: 0; }
+.loan-input {
+  flex: 1; height: 72rpx; padding: 0 20rpx;
+  background: white; border-radius: 14rpx;
+  font-size: 28rpx; color: #1f2937;
+  border: 2rpx solid #ccfbf1;
+}
+.loan-quick { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
+.loan-quick-item {
+  padding: 8rpx 20rpx; border-radius: 999rpx;
+  background: white; border: 2rpx solid #99f6e4;
+  font-size: 24rpx; color: #0f766e;
+}
+.loan-hint {
+  display: block; margin-top: 16rpx;
+  font-size: 22rpx; line-height: 1.6; color: #0f766e;
+}
+.submit-btn.loan-btn { background: linear-gradient(135deg, #0d9488, #0f766e); box-shadow: 0 8rpx 32rpx rgba(13,148,136,0.35); }
+
+/* ── 资金账户与转账（021） ─────────────────── */
+.type-tab.active-tra { background: white; color: #6366f1; box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.10); }
+.amount-input-wrap.transfer-bg { background: #eef2ff; }
+.amount-input-wrap.transfer-bg .yuan { font-size: 26rpx; max-width: 240rpx; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.submit-btn.transfer-btn { background: linear-gradient(135deg, #6366f1, #8b5cf6); box-shadow: 0 8rpx 32rpx rgba(99,102,241,0.35); }
+
+/* 转账：转出 → 转入 */
+.transfer-box { margin: 0 40rpx 24rpx; }
+.tf-pick-wrap { display: block; }
+.tf-row { display: flex; align-items: center; padding: 22rpx 24rpx; background: #f3f4f6; border-radius: 18rpx; }
+.tf-label { width: 84rpx; font-size: 26rpx; color: #6b7280; }
+.tf-name { flex: 1; font-size: 28rpx; font-weight: 600; color: #1f2937; }
+.tf-caret { font-size: 24rpx; color: #9ca3af; }
+.tf-swap { text-align: center; font-size: 32rpx; color: #6366f1; padding: 8rpx 0; }
+.tf-hint { display: block; margin-top: 14rpx; font-size: 22rpx; color: #9ca3af; line-height: 1.6; }
+
+/* 资金账户选择行 */
+.acc-row { padding: 0 40rpx; margin-bottom: 20rpx; }
+.acc-pick-wrap { display: block; }
+.acc-pick { display: flex; align-items: center; padding: 20rpx 24rpx; background: #eef2ff; border-radius: 18rpx; }
+.acc-pick-label { font-size: 26rpx; color: #4338ca; }
+.acc-pick-name { flex: 1; text-align: right; margin-right: 12rpx; font-size: 26rpx; font-weight: 700; color: #4338ca; }
+
+/* 账目行：转账标识 */
+.tx-transfer-badge { margin-left: 8rpx; padding: 2rpx 10rpx; border-radius: 10rpx; font-size: 20rpx; background: #eef2ff; color: #4f46e5; }
+.tx-amount.transfer { color: #6366f1; }
+
+/* 余额卡内的账户入口 */
+.account-entry { display: flex; align-items: center; justify-content: space-between; margin-top: 20rpx; padding-top: 20rpx; border-top: 2rpx solid rgba(255,255,255,0.25); }
+.ae-label { font-size: 24rpx; color: rgba(255,255,255,0.92); }
+.ae-arrow { font-size: 24rpx; color: rgba(255,255,255,0.8); }
 
 /* ── 月份选择弹窗 ──────────────────────────── */
 .month-picker-panel {

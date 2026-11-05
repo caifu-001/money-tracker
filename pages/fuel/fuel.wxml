@@ -39,7 +39,7 @@
         </view>
         <view class="summary-item">
           <text class="summary-label">每公里花费</text>
-          <text class="summary-value">{{summary.avgPerKm || '--'}}<text class="summary-unit" wx:if="{{summary.avgPerKm}}">元/km</text></text>
+          <text class="summary-value">{{summary.avgPerKm || '--'}}<text class="summary-unit" wx:if="{{summary.avgPerKm}}">{{baseCurrency}}/km</text></text>
         </view>
       </view>
       <view class="summary-grid">
@@ -57,9 +57,14 @@
         </view>
         <view class="summary-cell">
           <text class="cell-value">{{summary.totalAmount}}</text>
-          <text class="cell-label">累计油费(元)</text>
+          <text class="cell-label">累计油费({{baseCurrency}})</text>
         </view>
       </view>
+    </view>
+
+    <!-- 外币待结算：未入账，未计入累计油费 -->
+    <view class="pending-banner" wx:if="{{pendingCount > 0}}">
+      <text>⏳ 有 {{pendingCount}} 笔油费待结算，未计入累计油费</text>
     </view>
 
     <!-- 每月油费小计 -->
@@ -67,7 +72,7 @@
       <text class="section-title">每月油费小计</text>
       <view class="month-row" wx:for="{{monthlyStats}}" wx:key="month">
         <text class="month-name">{{item.monthLabel}}</text>
-        <text class="month-amount">¥{{item.amount}}</text>
+        <text class="month-amount">{{baseSymbol}}{{item.amount}}</text>
       </view>
     </view>
 
@@ -78,7 +83,8 @@
         <view class="record-head">
           <text class="record-date">{{item.dateLabel}}</text>
           <text class="record-vehicle" wx:if="{{item.vehicleName}}">{{item.vehicleName}}</text>
-          <text class="record-amount">¥{{item.amount}}</text>
+          <text class="record-amount pending" wx:if="{{item.pending}}">待结算</text>
+          <text class="record-amount" wx:else>{{baseSymbol}}{{item.amount}}</text>
         </view>
         <view class="record-body">
           <text class="record-meta">⛽ {{item.liters}}L · 📟 {{item.odometer}}km</text>
@@ -89,7 +95,7 @@
           <block wx:elif="{{item.dist}}">
             <text class="calc-tag">本段 {{item.dist}}km</text>
             <text class="calc-tag" wx:if="{{item.consumption}}">油耗 {{item.consumption}}L/100km</text>
-            <text class="calc-tag" wx:if="{{item.perKm}}">{{item.perKm}}元/km</text>
+            <text class="calc-tag" wx:if="{{item.perKm}}">{{item.perKm}}{{baseCurrency}}/km</text>
           </block>
           <text wx:else class="record-first">里程未增加，无法计算</text>
         </view>

@@ -126,6 +126,19 @@ page { background: #f0f2f7; }
   background: #ede9fe; padding: 8rpx 20rpx; border-radius: 20rpx;
 }
 
+/* 资金账户入口 */
+.accounts-entry-card {
+  margin: 16rpx 32rpx;
+  background: #fff; border-radius: 20rpx;
+  padding: 24rpx 28rpx; display: flex; align-items: center;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
+}
+.aec-icon { font-size: 40rpx; margin-right: 20rpx; }
+.aec-info { flex: 1; display: flex; flex-direction: column; }
+.aec-title { font-size: 28rpx; font-weight: 600; color: #1f2937; }
+.aec-desc { font-size: 22rpx; color: #9ca3af; margin-top: 6rpx; }
+.aec-arrow { font-size: 32rpx; color: #c4c9d4; }
+
 /* 新建账本 */
 .create-card {
   margin: 0 32rpx 16rpx;

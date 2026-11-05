@@ -55,6 +55,9 @@
 .record-date { font-size: 26rpx; font-weight: 600; color: #1f2937; }
 .record-vehicle { font-size: 22rpx; color: #6366f1; background: #eef2ff; border-radius: 8rpx; padding: 2rpx 10rpx; margin-left: 12rpx; }
 .record-amount { margin-left: auto; font-size: 28rpx; font-weight: 700; color: #ef4444; }
+.record-amount.pending { font-size: 24rpx; color: #4338ca; }
+.pending-banner { background: #eef2ff; border: 3rpx solid #c7d2fe; border-radius: 20rpx; padding: 20rpx 24rpx; margin-bottom: 24rpx; }
+.pending-banner text { font-size: 24rpx; color: #4338ca; }
 .record-body { margin-top: 8rpx; }
 .record-meta { font-size: 24rpx; color: #6b7280; }
 .record-note { font-size: 22rpx; color: #9ca3af; display: block; margin-top: 4rpx; }

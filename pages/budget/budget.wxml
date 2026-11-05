@@ -20,15 +20,15 @@
     <view class="ov-row">
       <view class="ov-item">
         <text class="ov-label">总预算</text>
-        <text class="ov-value purple">¥{{totalBudgetSaved || totalBudget}}</text>
+        <text class="ov-value purple">{{baseSymbol}}{{overviewBudgetText}}</text>
       </view>
       <view class="ov-item">
         <text class="ov-label">已支出</text>
-        <text class="ov-value red">¥{{totalSpent}}</text>
+        <text class="ov-value red">{{baseSymbol}}{{totalSpentText}}</text>
       </view>
       <view class="ov-item">
         <text class="ov-label">剩余</text>
-        <text class="ov-value {{totalRemaining>=0?'green':'red'}}">¥{{totalRemaining}}</text>
+        <text class="ov-value {{totalRemaining>=0?'green':'red'}}">{{baseSymbol}}{{totalRemainingText}}</text>
       </view>
     </view>
     <view class="progress-wrap">
@@ -40,6 +40,11 @@
     <view class="total-budget-btn" bindtap="openTotalBudget">
       {{totalBudgetSaved ? '修改总预算' : '设置总预算'}}
     </view>
+  </view>
+
+  <!-- 外币待结算：银行未入账，未计入「已支出」，回首页结算后会补上 -->
+  <view class="pending-banner" wx:if="{{pendingCount>0}}">
+    <text class="pb-text">⏳ 有 {{pendingCount}} 笔外币待结算，未计入已支出<text wx:if="{{pendingRefTotal>0}}"> · 参考 {{baseSymbol}}{{pendingRefText}}</text></text>
   </view>
 
   <view class="tip-banner">
@@ -56,7 +61,7 @@
           <text class="ci-icon">{{item.icon}}</text>
           <view class="ci-info">
             <text class="ci-name">{{item.category}}</text>
-            <text class="ci-meta" wx:if="{{item.amount>0}}">已花 ¥{{item.spent}} / 预算 ¥{{item.amount}}</text>
+            <text class="ci-meta" wx:if="{{item.amount>0}}">已花 {{baseSymbol}}{{item.spentText}} / 预算 {{baseSymbol}}{{item.amountText}}</text>
             <text class="ci-meta gray" wx:if="{{item.amount===0}}">点击设置预算</text>
           </view>
         </view>
@@ -85,7 +90,7 @@
       <text class="em-cat-icon">{{editCatIcon}}</text>
       <text class="em-cat-name">{{editCatName === '__TOTAL__' ? '总预算' : editCatName}}</text>
       <view class="em-input-wrap">
-        <text class="em-yuan">¥</text>
+        <text class="em-yuan">{{baseSymbol}}</text>
         <input class="em-input" type="digit" placeholder="输入月度预算（留空删除预算）" value="{{editAmount}}" bindinput="onAmountInput" focus="{{showEditModal}}"/>
       </view>
       <view class="em-btns">

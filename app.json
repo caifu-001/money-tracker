@@ -10,6 +10,7 @@
     "pages/admin/admin",
     "pages/export/export",
     "pages/fuel/fuel",
+    "pages/accounts/accounts",
     "pages/privacy/privacy",
     "pages/agreement/agreement",
     "pages/settings/settings"

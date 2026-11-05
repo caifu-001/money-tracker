@@ -1,0 +1,126 @@
+<view class="page">
+  <!-- 未登录 -->
+  <view class="guest-tip" wx:if="{{isGuest}}">
+    <text class="guest-icon">🔐</text>
+    <text class="guest-title">登录后管理资金账户</text>
+    <text class="guest-desc">资产账户（现金 / 储蓄卡）与负债账户（信用卡）分开统计，还款不重复计入支出</text>
+    <view class="login-btn" bindtap="goLogin">登录 / 注册</view>
+  </view>
+
+  <block wx:else>
+    <view class="loading-wrap" wx:if="{{loading}}"><text class="loading">加载中...</text></view>
+
+    <block wx:else>
+      <!-- 净资产卡片 -->
+      <view class="net-card">
+        <text class="net-label">净资产</text>
+        <text class="net-amount">{{netWorthNegative?'-':''}}{{baseSymbol}}{{netWorthText}}</text>
+        <view class="net-grid">
+          <view class="net-cell">
+            <text class="nc-value">{{baseSymbol}}{{totalAssetsText}}</text>
+            <text class="nc-label">总资产</text>
+          </view>
+          <view class="net-cell">
+            <text class="nc-value">{{baseSymbol}}{{totalLiabilitiesText}}</text>
+            <text class="nc-label">总负债</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 资产账户 -->
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">💰 资产账户</text>
+          <text class="section-add" bindtap="openAdd" data-kind="asset">＋ 添加</text>
+        </view>
+        <view class="acc-item" wx:for="{{assets}}" wx:key="id" bindtap="openEdit" data-id="{{item.id}}">
+          <text class="acc-icon">{{item.icon}}</text>
+          <view class="acc-info">
+            <text class="acc-name">{{item.name}}<text class="acc-tail" wx:if="{{item.card_tail}}"> ··{{item.card_tail}}</text></text>
+            <text class="acc-sub">{{item.txCount}} 笔账目</text>
+          </view>
+          <text class="acc-amount {{item.negative?'neg':''}}">{{baseSymbol}}{{item.balanceText}}</text>
+        </view>
+        <text class="acc-empty" wx:if="{{assets.length===0}}">暂无资产账户，点右上角添加</text>
+      </view>
+
+      <!-- 负债账户 -->
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">💳 负债账户</text>
+          <text class="section-add" bindtap="openAdd" data-kind="liability">＋ 添加</text>
+        </view>
+        <view class="acc-item" wx:for="{{liabilities}}" wx:key="id" bindtap="openEdit" data-id="{{item.id}}">
+          <text class="acc-icon">{{item.icon}}</text>
+          <view class="acc-info">
+            <text class="acc-name">{{item.name}}<text class="acc-tail" wx:if="{{item.card_tail}}"> ··{{item.card_tail}}</text></text>
+            <text class="acc-sub">已用 {{baseSymbol}}{{item.balanceText}} · {{item.txCount}} 笔</text>
+          </view>
+          <text class="acc-amount debt">{{baseSymbol}}{{item.balanceText}}</text>
+        </view>
+        <text class="acc-empty" wx:if="{{liabilities.length===0}}">暂无负债账户</text>
+      </view>
+
+      <!-- 使用说明 -->
+      <view class="tip-card">
+        <text class="tip-title">💡 信用卡这样记最准</text>
+        <text class="tip-line">1. 刷卡消费 → 记一笔支出，资金账户选「信用卡」</text>
+        <text class="tip-line">2. 出账单还款 → 记一笔转账，从「银行卡」转到「信用卡」</text>
+        <text class="tip-line">3. 还款不是支出，只是把负债还掉，不会重复计入</text>
+      </view>
+    </block>
+  </block>
+</view>
+
+<!-- 新增 / 编辑账户弹窗 -->
+<view class="modal-mask" wx:if="{{showModal}}" bindtap="closeModal"></view>
+<view class="sheet {{showModal?'show':''}}" catchtap="noop">
+  <view class="sheet-head">
+    <text class="sheet-title">{{editingId?'编辑账户':'新增账户'}}</text>
+    <text class="sheet-close" bindtap="closeModal">✕</text>
+  </view>
+
+  <scroll-view scroll-y class="sheet-body">
+    <view class="form-row">
+      <text class="form-label">账户名称</text>
+      <input class="form-input" value="{{form.name}}" bindinput="onNameInput" placeholder="如 招行储蓄卡 / 招行信用卡" maxlength="20"/>
+    </view>
+
+    <view class="form-row">
+      <text class="form-label">账户类型</text>
+      <view class="kind-row">
+        <view class="kind-item {{form.kind===item.code?'selected':''}}" wx:for="{{kindOptions}}" wx:key="code" bindtap="onKindTap" data-kind="{{item.code}}">
+          <text class="kind-icon">{{item.icon}}</text>
+          <text class="kind-name">{{item.label}}</text>
+        </view>
+      </view>
+      <text class="form-hint">负债账户（信用卡/花呗）：消费即支出，还款记转账，不会重复计算</text>
+    </view>
+
+    <view class="form-row">
+      <text class="form-label">图标</text>
+      <view class="icon-grid">
+        <view class="icon-item {{form.icon===item?'selected':''}}" wx:for="{{iconOptions}}" wx:key="*this" bindtap="onIconTap" data-icon="{{item}}">{{item}}</view>
+      </view>
+    </view>
+
+    <view class="form-row">
+      <text class="form-label">期初余额</text>
+      <view class="form-input-wrap">
+        <text class="form-symbol">{{baseSymbol}}</text>
+        <input class="form-input" type="digit" value="{{form.initial_balance}}" bindinput="onBalanceInput" placeholder="0.00"/>
+      </view>
+      <text class="form-hint">建账前该账户已有多少钱；信用卡可填当前欠款额，留空代表 0</text>
+    </view>
+
+    <view class="form-row">
+      <text class="form-label">卡号后四位（可选）</text>
+      <input class="form-input" value="{{form.card_tail}}" bindinput="onCardTailInput" placeholder="如 8866" maxlength="4"/>
+    </view>
+  </scroll-view>
+
+  <view class="sheet-actions">
+    <text class="btn-ghost" wx:if="{{editingId}}" bindtap="deleteAccount">删除 / 归档</text>
+    <view class="btn-primary {{saving?'disabled':''}}" bindtap="saveAccount">{{saving?'保存中...':'保存'}}</view>
+  </view>
+</view>

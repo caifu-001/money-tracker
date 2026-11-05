@@ -53,6 +53,14 @@ page { background: #f0f2f7; }
 .ledger-info { flex: 1; min-width: 0; }
 .ledger-name { display: block; font-size: 30rpx; color: #1f2937; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ledger-date { display: block; font-size: 22rpx; color: #9ca3af; margin-top: 4rpx; }
+/* 本位币选择 */
+.ledger-cur-row { margin-top: 10rpx; }
+.ledger-cur {
+  display: inline-flex; align-items: center; gap: 8rpx;
+  padding: 6rpx 18rpx; border-radius: 40rpx; background: #f3f4f6;
+}
+.ledger-cur-label { font-size: 20rpx; color: #9ca3af; }
+.ledger-cur-code { font-size: 22rpx; font-weight: 700; color: #6366f1; }
 .ledger-check { width: 44rpx; height: 44rpx; background: #6366f1; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24rpx; flex-shrink: 0; }
 
 /* 操作按钮 */

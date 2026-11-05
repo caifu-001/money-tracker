@@ -31,30 +31,41 @@
   </view>
   <view class="overview-card">
     <view class="ov-row">
-      <view class="ov-item"><text class="ov-label">收入</text><text class="ov-value income">+¥{{totalIncome || 0}}</text></view>
-      <view class="ov-item"><text class="ov-label">支出</text><text class="ov-value expense">-¥{{totalExpense || 0}}</text></view>
+      <view class="ov-item"><text class="ov-label">收入</text><text class="ov-value income">+{{baseSymbol}}{{totalIncome || 0}}</text></view>
+      <view class="ov-item"><text class="ov-label">支出</text><text class="ov-value expense">-{{baseSymbol}}{{totalExpense || 0}}</text></view>
     </view>
     <view class="balance-row">
       <text class="balance-label">结余</text>
-      <text class="balance-value {{balance>=0?'income':'expense'}}">{{balance >= 0 ? '+' : ''}}¥{{balance || 0}}</text>
+      <text class="balance-value {{balance>=0?'income':'expense'}}">{{balance >= 0 ? '+' : ''}}{{baseSymbol}}{{balance || 0}}</text>
     </view>
+  </view>
+  <!-- 外币待结算：银行未入账，未计入上方统计。点开可看是哪几笔 -->
+  <view class="pending-banner" wx:if="{{pendingCount>0}}" bindtap="openPendingDetail">
+    <text class="pb-text">⏳ {{pendingCount}} 笔外币待结算未计入<text wx:if="{{pendingRefTotal>0}}"> · 参考 {{baseSymbol}}{{pendingRefText}}</text></text>
+    <text class="pb-more">查看 ›</text>
+  </view>
+  <!-- 转账：账户间划转，不是收支，也不进预算。点开跳到账户视图 -->
+  <view class="transfer-banner" wx:if="{{!loading && transferCount>0}}" bindtap="goAccountView">
+    <text class="pb-text">🔄 本期 {{transferCount}} 笔转账（合计 {{baseSymbol}}{{transferTotalText}}）不计入收支与预算</text>
+    <text class="pb-more">查看 ›</text>
   </view>
   <view class="view-tabs">
     <view class="view-tab {{viewType==='expense'?'active':''}}" bindtap="switchView" data-type="expense"><text>💸 支出</text></view>
     <view class="view-tab {{viewType==='income'?'active':''}}" bindtap="switchView" data-type="income"><text>💰 收入</text></view>
-    <view class="view-tab {{viewType==='payment'?'active':''}}" bindtap="switchView" data-type="payment"><text>💳 支付</text></view>
+    <view class="view-tab {{viewType==='account'?'active':''}}" bindtap="switchView" data-type="account"><text>🏦 账户</text></view>
+    <view class="view-tab {{viewType==='loan'?'active':''}}" bindtap="switchView" data-type="loan"><text>🤝 借款</text></view>
   </view>
   <view class="loading" wx:if="{{loading}}"><text class="loading-text">加载中...</text></view>
   <view wx:if="{{!loading}}">
 
     <!-- 搜索卡片 - 全局适用 -->
     <view class="search-card">
-      <input class="search-input" type="text" placeholder="搜索类别..." value="{{searchCat}}" bindinput="onSearchInput" bindconfirm="onSearchConfirm" confirm-type="search"/>
+      <input class="search-input" type="text" placeholder="{{searchPlaceholder}}" value="{{searchCat}}" bindinput="onSearchInput" bindconfirm="onSearchConfirm" confirm-type="search"/>
       <view class="search-clear" wx:if="{{searchCat}}" bindtap="clearSearch"><text>✕</text></view>
     </view>
 
-    <!-- 分类目录筛选 -->
-    <view class="cat-filter-bar">
+    <!-- 分类目录筛选（借款视图不适用：借款没有消费分类） -->
+    <view class="cat-filter-bar" wx:if="{{viewType!=='loan'}}">
       <view class="cf-btn" bindtap="toggleCatFilter">
         <text class="cf-icon">🗂️</text>
         <text class="cf-label">{{catFilterName || '按分类目录统计'}}</text>
@@ -63,83 +74,89 @@
       <view class="cf-clear" wx:if="{{catFilterName}}" bindtap="clearCatFilter"><text>✕ 清除</text></view>
     </view>
     <!-- 分类筛选激活提示 -->
-    <view class="cat-filter-active" wx:if="{{catFilterName}}">
+    <view class="cat-filter-active" wx:if="{{catFilterName && viewType!=='loan'}}">
       <text class="cfa-text">当前统计目录：{{catFilterName}}（含 {{catFilterNames.length}} 个子分类）</text>
     </view>
 
-    <!-- 搜索结果 - 紧贴搜索框下方 -->
-    <view wx:if="{{searchCat && viewType==='expense'}}">
-      <view class="breakdown-section" wx:if="{{filteredExpenseList && filteredExpenseList.length > 0}}">
-        <text class="breakdown-title expense">💸 支出搜索结果（{{filteredExpenseList.length}}项）</text>
-        <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{filteredExpenseList}}" wx:key="category">
-            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
-            <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
-          </view>
+    <!-- 借款搜索结果：按对方匹配，金额是净欠款 -->
+    <view class="bd-card" wx:if="{{searchCat && searchResultKind==='loan' && searchResultList && searchResultList.length > 0}}">
+      <view class="bd-head">
+        <text class="bd-head-title">🔍 搜索结果</text>
+        <text class="bd-head-sub">{{searchResultList.length}} 位对方</text>
+      </view>
+      <view class="ln-row" wx:for="{{searchResultList}}" wx:key="name" bindtap="openLoanDetail" data-party="{{item.name}}">
+        <text class="ln-avatar">🤝</text>
+        <view class="ln-mid">
+          <text class="ln-name">{{item.name}}</text>
+          <text class="ln-sub">{{item.percent}}</text>
         </view>
-      </view>
-      <view class="empty-state" wx:if="{{!filteredExpenseList || filteredExpenseList.length === 0}}">
-        <text class="empty-text">未找到匹配「{{searchCat}}」的支出类别</text>
-      </view>
-    </view>
-    <view wx:if="{{searchCat && viewType==='income'}}">
-      <view class="breakdown-section" wx:if="{{filteredIncomeList && filteredIncomeList.length > 0}}">
-        <text class="breakdown-title income">💰 收入搜索结果（{{filteredIncomeList.length}}项）</text>
-        <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{filteredIncomeList}}" wx:key="category">
-            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
-            <view class="bi-right"><text class="bi-amount income">+¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
-          </view>
-        </view>
-      </view>
-      <view class="empty-state" wx:if="{{!filteredIncomeList || filteredIncomeList.length === 0}}">
-        <text class="empty-text">未找到匹配「{{searchCat}}」的收入类别</text>
-      </view>
-    </view>
-    <view wx:if="{{searchCat && viewType==='payment'}}">
-      <view class="breakdown-section" wx:if="{{filteredPaymentList && filteredPaymentList.length > 0}}">
-        <text class="breakdown-title">💳 支付搜索结果（{{filteredPaymentList.length}}项）</text>
-        <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{filteredPaymentList}}" wx:key="method">
-            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.label}}</text></view>
-            <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
-          </view>
-        </view>
-      </view>
-      <view class="empty-state" wx:if="{{!filteredPaymentList || filteredPaymentList.length === 0}}">
-        <text class="empty-text">未找到匹配「{{searchCat}}」的支付方式</text>
+        <text class="ln-net {{item.cls}}">{{baseSymbol}}{{item.amount}}</text>
       </view>
     </view>
 
-    <!-- 统计模式切换 -->
-    <view class="stat-mode-toggle">
+    <!-- 搜索结果 - 紧贴搜索框下方（统一组件，按当前视图决定匹配维度） -->
+    <view class="bd-card" wx:if="{{searchCat && searchResultKind!=='loan' && searchResultList && searchResultList.length > 0}}">
+      <view class="bd-head">
+        <text class="bd-head-title">🔍 搜索结果</text>
+        <text class="bd-head-sub">{{searchResultList.length}} 项</text>
+      </view>
+      <view class="bd-row" wx:for="{{searchResultList}}" wx:key="name">
+        <view class="bd-row-top">
+          <text class="bd-row-icon">{{item.icon}}</text>
+          <text class="bd-row-name">{{item.name}}</text>
+          <text class="bd-row-amt {{item.cls}}">{{item.sign}}{{baseSymbol}}{{item.amount}}</text>
+        </view>
+        <view class="bd-row-bar">
+          <view class="bd-track"><view class="bd-fill {{item.cls}}" style="width:{{item.percent}}%"></view></view>
+          <text class="bd-pct">{{item.percent}}%</text>
+        </view>
+      </view>
+    </view>
+    <view class="empty-state" wx:if="{{searchCat && searchResultList && searchResultList.length === 0}}">
+      <text class="empty-text">未找到匹配「{{searchCat}}」的结果</text>
+    </view>
+
+    <!-- 支出视图：分组维度（分类 / 支付方式）——把原「支付」一级 Tab 降级到这里 -->
+    <view class="stat-mode-toggle" wx:if="{{viewType==='expense'}}">
+      <text class="stat-mode-label">分组</text>
+      <view class="mode-btn {{expenseDim==='category'?'active':''}}" bindtap="switchExpenseDim" data-dim="category"><text>按分类</text></view>
+      <view class="mode-btn {{expenseDim==='payment'?'active':''}}" bindtap="switchExpenseDim" data-dim="payment"><text>按支付方式</text></view>
+    </view>
+
+    <!-- 统计粒度（小类/大类）：仅按分类统计时才有意义 -->
+    <view class="stat-mode-toggle" wx:if="{{(viewType==='expense' && expenseDim==='category') || viewType==='income'}}">
       <text class="stat-mode-label">统计</text>
       <view class="mode-btn {{statMode==='detail'?'active':''}}" bindtap="switchStatMode" data-mode="detail"><text>小类</text></view>
       <view class="mode-btn {{statMode==='summary'?'active':''}}" bindtap="switchStatMode" data-mode="summary"><text>大类</text></view>
     </view>
 
-    <!-- 支出视图 -->
-    <view wx:if="{{viewType==='expense'}}">
-      <!-- 横向比例圆饼图 -->
-      <view class="pie-card" wx:if="{{expenseBreakdown.length > 0}}">
-        <text class="chart-title">💸 支出占比</text>
-        <view class="bar-pie-row">
-          <view class="bar-pie-chart">
-            <view
-              wx:for="{{expenseBreakdown}}"
-              wx:key="category"
-              class="bar-pie-bar"
-              style="width:{{item.percent}}%;background:{{item.color}}"
-            ></view>
-          </view>
-          <view class="bar-pie-total"><text class="bpt-text">{{expenseBreakdown.length}}</text><text class="bpt-sub">类</text></view>
+    <!-- 支出视图：按分类 -->
+    <view wx:if="{{viewType==='expense' && expenseDim==='category'}}">
+      <!-- 支出构成：一图一说，进度条即占比，明细即图例 -->
+      <view class="bd-card" wx:if="{{expenseBreakdown.length > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">💸 支出构成</text>
+          <text class="bd-head-sub">{{expenseBreakdown.length}} 类 · 共 {{baseSymbol}}{{totalExpense}}</text>
         </view>
-        <view class="pie-legend">
-          <view class="legend-item" wx:for="{{expenseBreakdown}}" wx:key="category">
-            <view class="legend-dot" style="background:{{item.color}}"></view>
-            <text class="legend-name">{{item.icon}} {{item.category}}</text>
-            <text class="legend-pct">{{item.percent}}%</text>
-            <text class="legend-amount">¥{{item.amount}}</text>
+        <view class="bd-row" wx:for="{{expenseBreakdown}}" wx:key="category" bindtap="openCategoryDetail" data-cat="{{item.category}}" data-type="expense">
+          <view class="bd-row-top">
+            <text class="bd-row-icon">{{item.icon}}</text>
+            <text class="bd-row-name">{{item.category}}</text>
+            <text class="bd-row-amt expense">-{{baseSymbol}}{{item.amount}}</text>
+          </view>
+          <view class="bd-row-bar">
+            <view class="bd-track"><view class="bd-fill expense" style="width:{{item.percent}}%"></view></view>
+            <text class="bd-pct">{{item.percent}}%</text>
+          </view>
+          <view class="sub-items" wx:if="{{item.subItems && item.subItems.length}}">
+            <view class="sub-item" wx:for="{{item.subItems}}" wx:for-item="sub" wx:key="category" catchtap="openCategoryDetail" data-cat="{{sub.category}}" data-type="expense">
+              <text class="sub-icon">{{sub.icon}}</text>
+              <text class="sub-name">{{sub.category}}</text>
+              <view class="sub-right">
+                <text class="sub-amount expense">{{baseSymbol}}{{sub.amount}}</text>
+                <text class="sub-pct">{{sub.percent}}%</text>
+              </view>
+            </view>
           </view>
         </view>
       </view>
@@ -162,25 +179,6 @@
           </view>
         </view>
       </view>
-      <view class="breakdown-section" wx:if="{{expenseBreakdown.length > 0}}">
-        <text class="breakdown-title expense">💸 支出明细</text>
-        <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{expenseBreakdown}}" wx:key="category" bindtap="openCategoryDetail" data-cat="{{item.category}}" data-type="expense">
-            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
-            <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
-            <view class="sub-items" wx:if="{{item.subItems && item.subItems.length}}">
-              <view class="sub-item" wx:for="{{item.subItems}}" wx:for-item="sub" wx:key="category" catchtap="openCategoryDetail" data-cat="{{sub.category}}" data-type="expense">
-                <text class="sub-icon">{{sub.icon}}</text>
-                <text class="sub-name">{{sub.category}}</text>
-                <view class="sub-right">
-                  <text class="sub-amount expense">¥{{sub.amount}}</text>
-                  <text class="sub-pct">{{sub.percent}}%</text>
-                </view>
-              </view>
-            </view>
-          </view>
-        </view>
-      </view>
       <view class="empty-state" wx:if="{{expenseBreakdown.length===0 && dailyTrend.length===0}}">
         <text class="empty-emoji">💸</text><text class="empty-text">暂无支出数据</text>
       </view>
@@ -188,20 +186,20 @@
 
     <!-- 收入视图 -->
     <view wx:if="{{viewType==='income'}}">
-      <view class="pie-card" wx:if="{{incomeBreakdown.length > 0}}">
-        <text class="chart-title">💰 收入占比</text>
-        <view class="bar-pie-row">
-          <view class="bar-pie-chart">
-            <view wx:for="{{incomeBreakdown}}" wx:key="category" class="bar-pie-bar" style="width:{{item.percent}}%;background:{{item.color || '#22c55e'}}"></view>
-          </view>
-          <view class="bar-pie-total"><text class="bpt-text">{{incomeBreakdown.length}}</text><text class="bpt-sub">类</text></view>
+      <view class="bd-card" wx:if="{{incomeBreakdown.length > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">💰 收入构成</text>
+          <text class="bd-head-sub">{{incomeBreakdown.length}} 类 · 共 {{baseSymbol}}{{totalIncome}}</text>
         </view>
-        <view class="pie-legend">
-          <view class="legend-item" wx:for="{{incomeBreakdown}}" wx:key="category">
-            <view class="legend-dot" style="background:{{item.color || '#22c55e'}}"></view>
-            <text class="legend-name">{{item.icon}} {{item.category}}</text>
-            <text class="legend-pct">{{item.percent}}%</text>
-            <text class="legend-amount">¥{{item.amount}}</text>
+        <view class="bd-row" wx:for="{{incomeBreakdown}}" wx:key="category" bindtap="openCategoryDetail" data-cat="{{item.category}}" data-type="income">
+          <view class="bd-row-top">
+            <text class="bd-row-icon">{{item.icon}}</text>
+            <text class="bd-row-name">{{item.category}}</text>
+            <text class="bd-row-amt income">+{{baseSymbol}}{{item.amount}}</text>
+          </view>
+          <view class="bd-row-bar">
+            <view class="bd-track"><view class="bd-fill income" style="width:{{item.percent}}%"></view></view>
+            <text class="bd-pct">{{item.percent}}%</text>
           </view>
         </view>
       </view>
@@ -215,53 +213,208 @@
           </view>
         </view>
       </view>
-      <view class="breakdown-section" wx:if="{{incomeBreakdown.length > 0}}">
-        <text class="breakdown-title income">💰 收入明细</text>
-        <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{incomeBreakdown}}" wx:key="category" bindtap="openCategoryDetail" data-cat="{{item.category}}" data-type="income">
-            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.category}}</text></view>
-            <view class="bi-right"><text class="bi-amount income">+¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
-          </view>
-        </view>
-      </view>
       <view class="empty-state" wx:if="{{incomeBreakdown.length===0}}">
         <text class="empty-emoji">💰</text><text class="empty-text">暂无收入数据</text>
       </view>
     </view>
 
-    <!-- 支付方式视图 -->
-    <view wx:if="{{viewType==='payment'}}">
-      <view class="pie-card" wx:if="{{paymentBreakdown.length > 0}}">
-        <text class="chart-title">💳 支付方式占比</text>
-        <view class="bar-pie-row">
-          <view class="bar-pie-chart">
-            <view wx:for="{{paymentBreakdown}}" wx:key="method" class="bar-pie-bar" style="width:{{item.percent}}%;background:{{item.color || '#8b5cf6'}}"></view>
-          </view>
-          <view class="bar-pie-total"><text class="bpt-text">{{paymentBreakdown.length}}</text><text class="bpt-sub">种</text></view>
+    <!-- 支出视图：按支付方式（原「支付」一级 Tab） -->
+    <view wx:if="{{viewType==='expense' && expenseDim==='payment'}}">
+      <view class="bd-card" wx:if="{{paymentBreakdown.length > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">💳 支付方式构成</text>
+          <text class="bd-head-sub">{{paymentBreakdown.length}} 种 · 共 {{baseSymbol}}{{totalExpense}}</text>
         </view>
-        <view class="pie-legend">
-          <view class="legend-item" wx:for="{{paymentBreakdown}}" wx:key="method">
-            <view class="legend-dot" style="background:{{item.color || '#8b5cf6'}}"></view>
-            <text class="legend-name">{{item.icon}} {{item.label}}</text>
-            <text class="legend-pct">{{item.percent}}%</text>
-            <text class="legend-amount">¥{{item.amount}}</text>
+        <view class="bd-row" wx:for="{{paymentBreakdown}}" wx:key="method" bindtap="openCategoryDetail" data-method="{{item.method}}" data-type="payment">
+          <view class="bd-row-top">
+            <text class="bd-row-icon">{{item.icon}}</text>
+            <text class="bd-row-name">{{item.label}}</text>
+            <text class="bd-row-amt expense">-{{baseSymbol}}{{item.amount}}</text>
           </view>
-        </view>
-      </view>
-      <view class="breakdown-section" wx:if="{{paymentBreakdown.length > 0}}">
-        <text class="breakdown-title">💳 支付明细</text>
-        <view class="breakdown-list">
-          <view class="breakdown-item" wx:for="{{paymentBreakdown}}" wx:key="method" bindtap="openCategoryDetail" data-method="{{item.method}}" data-type="payment">
-            <view class="bi-left"><text class="bi-icon">{{item.icon}}</text><text class="bi-name">{{item.label}}</text></view>
-            <view class="bi-right"><text class="bi-amount expense">-¥{{item.amount}}</text><text class="bi-pct">{{item.percent}}%</text></view>
+          <view class="bd-row-bar">
+            <view class="bd-track"><view class="bd-fill expense" style="width:{{item.percent}}%"></view></view>
+            <text class="bd-pct">{{item.percent}}%</text>
           </view>
         </view>
+        <text class="bd-foot">仅统计支出。同一笔支出若更换账户，请到「账户」视图查看资金流向</text>
       </view>
       <view class="empty-state" wx:if="{{paymentBreakdown.length===0}}">
         <text class="empty-emoji">💳</text><text class="empty-text">暂无支付数据</text>
       </view>
     </view>
 
+    <!-- 资金账户视图 -->
+    <view wx:if="{{viewType==='account'}}">
+      <!-- 支出账户 -->
+      <view class="bd-card" wx:if="{{accountBreakdown.length > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">💸 支出账户</text>
+          <text class="bd-head-sub">{{accountBreakdown.length}} 个 · 共 {{baseSymbol}}{{totalExpense}}</text>
+        </view>
+        <view class="bd-row" wx:for="{{accountBreakdown}}" wx:key="accId" bindtap="openAccountDetail" data-id="{{item.accId}}" data-name="{{item.category}}" data-flow="expense">
+          <view class="bd-row-top">
+            <text class="bd-row-icon">{{item.icon}}</text>
+            <text class="bd-row-name">{{item.category}}</text>
+            <text class="bd-row-amt account">-{{baseSymbol}}{{item.amount}}</text>
+          </view>
+          <view class="bd-row-bar">
+            <view class="bd-track"><view class="bd-fill account" style="width:{{item.percent}}%"></view></view>
+            <text class="bd-pct">{{item.percent}}%</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 收入账户 -->
+      <view class="bd-card" wx:if="{{accountIncomeBreakdown.length > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">💰 收入账户</text>
+          <text class="bd-head-sub">{{accountIncomeBreakdown.length}} 个 · 共 {{baseSymbol}}{{totalIncome}}</text>
+        </view>
+        <view class="bd-row" wx:for="{{accountIncomeBreakdown}}" wx:key="accId" bindtap="openAccountDetail" data-id="{{item.accId}}" data-name="{{item.category}}" data-flow="income">
+          <view class="bd-row-top">
+            <text class="bd-row-icon">{{item.icon}}</text>
+            <text class="bd-row-name">{{item.category}}</text>
+            <text class="bd-row-amt income">+{{baseSymbol}}{{item.amount}}</text>
+          </view>
+          <view class="bd-row-bar">
+            <view class="bd-track"><view class="bd-fill income" style="width:{{item.percent}}%"></view></view>
+            <text class="bd-pct">{{item.percent}}%</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 转账流动：转账不计收支，只有这里能看到 -->
+      <view class="bd-card" wx:if="{{transferCount > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">🔄 转账流动</text>
+          <text class="bd-head-sub">{{transferCount}} 笔 · 共 {{baseSymbol}}{{transferTotalText}}</text>
+        </view>
+        <view class="bd-row" wx:for="{{transferList}}" wx:key="id" bindtap="editTransaction" data-id="{{item.id}}">
+          <view class="bd-row-top">
+            <text class="bd-row-icon">{{item.fromIcon}}</text>
+            <text class="bd-row-name">{{item.fromName}} → {{item.toName}}</text>
+            <text class="bd-row-amt transfer">{{baseSymbol}}{{item.amount}}</text>
+          </view>
+          <view class="bd-row-bar">
+            <text class="tf-date">{{item.date}}{{item.note?' · '+item.note:''}}</text>
+          </view>
+        </view>
+        <text class="bd-foot">转账不产生收入或支出，只改变账户余额</text>
+      </view>
+
+      <view class="empty-state" wx:if="{{accountBreakdown.length===0 && accountIncomeBreakdown.length===0 && transferCount===0}}">
+        <text class="empty-emoji">🏦</text><text class="empty-text">暂无账户数据</text>
+      </view>
+    </view>
+
+    <!-- 借款视图（022）：欠款是存量，用全量借款算，不受月份筛选影响 -->
+    <view wx:if="{{viewType==='loan'}}">
+      <view class="loan-glance">
+        <view class="lg-item">
+          <text class="lg-label">待收回</text>
+          <text class="lg-value receivable">{{loanSummary.receivableText}}</text>
+          <text class="lg-sub">别人欠我</text>
+        </view>
+        <view class="lg-split"></view>
+        <view class="lg-item">
+          <text class="lg-label">待偿还</text>
+          <text class="lg-value payable">{{loanSummary.payableText}}</text>
+          <text class="lg-sub">我欠别人</text>
+        </view>
+      </view>
+      <view class="loan-net-bar">
+        <text class="lnb-label">净头寸</text>
+        <text class="lnb-value {{loanSummary.netPositive?'payable':'receivable'}}">{{loanSummary.netText}}</text>
+        <text class="lnb-hint">{{loanSummary.netPositive ? '净欠别人' : '净借出'}}</text>
+        <text class="lnb-foot">累计 · 不受月份筛选</text>
+      </view>
+
+      <view class="bd-card" wx:if="{{loanParties.length > 0}}">
+        <view class="bd-head">
+          <text class="bd-head-title">🤝 按对方结算</text>
+          <text class="bd-head-sub">{{loanOpenCount}} 人未结清 / 共 {{loanPartyCount}} 人</text>
+        </view>
+        <view class="ln-row" wx:for="{{loanParties}}" wx:key="party" bindtap="openLoanDetail" data-party="{{item.party}}">
+          <text class="ln-avatar">🤝</text>
+          <view class="ln-mid">
+            <text class="ln-name">{{item.party}}</text>
+            <text class="ln-sub">{{item.count}} 笔 · 最近 {{item.lastDate}}</text>
+          </view>
+          <view class="ln-right">
+            <text class="ln-net {{item.kind}}">{{baseSymbol}}{{item.netText}}</text>
+            <text class="ln-tag {{item.kind}}">{{item.netLabel}}</text>
+          </view>
+        </view>
+        <text class="bd-foot">借款不计入收支与预算。还钱时反向记一笔（借出→收入记借入），两条自动抵消。</text>
+      </view>
+
+      <view class="empty-state" wx:if="{{loanParties.length===0}}">
+        <text class="empty-emoji">🤝</text>
+        <text class="empty-text">还没有借款记录</text>
+        <text class="loan-empty-hint">记账时勾选「🤝 借款」：在支出里记 = 借出，在收入里记 = 借入</text>
+      </view>
+    </view>
+
+  </view>
+
+  <!-- 外币待结算明细弹窗 -->
+  <view class="detail-mask" wx:if="{{showPending}}" bindtap="closePending"></view>
+  <view class="detail-sheet {{showPending?'show':''}}">
+    <view class="detail-header">
+      <text class="detail-title">⏳ 外币待结算（{{pendingDetailList.length}} 笔）</text>
+      <view class="detail-close" bindtap="closePending"><text>✕</text></view>
+    </view>
+    <view class="pending-tip">
+      <text>银行最终扣款金额尚未确定，这些账目<text class="hl">未计入</text>上方任何统计。账单出来后点进该笔账单，填入实际扣款金额即可转为已结算。</text>
+    </view>
+    <scroll-view class="detail-body" scroll-y>
+      <view class="detail-item" wx:for="{{pendingDetailList}}" wx:key="id" bindtap="editTransaction" data-id="{{item.id}}">
+        <view class="detail-item-left">
+          <text class="detail-item-date">{{item.date}} · {{item.category}}</text>
+          <text class="detail-item-note">{{item.payText}}{{item.note?' · '+item.note:''}}</text>
+        </view>
+        <view class="detail-item-right">
+          <text class="detail-item-amount expense">{{item.originalText}}</text>
+          <text class="detail-item-pay" wx:if="{{item.refText}}">参考 {{item.refText}}</text>
+        </view>
+        <text class="detail-item-arrow">›</text>
+      </view>
+      <view class="detail-empty" wx:if="{{pendingDetailList.length===0}}">
+        <text>暂无待结算账单</text>
+      </view>
+    </scroll-view>
+    <view class="pending-foot">
+      <text>合计参考 {{baseSymbol}}{{pendingRefText}}，仅供参考，以银行实际扣款为准</text>
+    </view>
+  </view>
+
+  <!-- 借款明细弹窗：某个对方的每一笔借出 / 借入 -->
+  <view class="detail-mask" wx:if="{{showLoanDetail}}" bindtap="closeLoanDetail"></view>
+  <view class="detail-sheet {{showLoanDetail?'show':''}}">
+    <view class="detail-header">
+      <text class="detail-title">🤝 {{loanDetailTitle}}</text>
+      <view class="detail-close" bindtap="closeLoanDetail"><text>✕</text></view>
+    </view>
+    <view class="loan-detail-net {{loanDetailKind}}">
+      <text class="ldn-label">{{loanDetailNetLabel}}</text>
+      <text class="ldn-value">{{baseSymbol}}{{loanDetailNetText}}</text>
+    </view>
+    <scroll-view class="detail-body" scroll-y>
+      <view class="detail-item" wx:for="{{loanDetailList}}" wx:key="id" bindtap="editLoanTx" data-id="{{item.id}}" data-date="{{item.date}}">
+        <view class="detail-item-left">
+          <text class="detail-item-cat">{{item.dirLabel}}</text>
+          <text class="detail-item-date">{{item.date}}{{item.note?' · '+item.note:''}}</text>
+        </view>
+        <text class="loan-detail-amt {{item.dir}}">{{item.sign}}{{baseSymbol}}{{item.amountText}}</text>
+        <text class="detail-item-arrow">›</text>
+      </view>
+      <view class="detail-empty" wx:if="{{loanDetailList.length===0}}">
+        <text>暂无借款流水</text>
+      </view>
+    </scroll-view>
+    <view class="pending-foot">
+      <text>净额 = 借入合计 − 借出合计，为 0 即已结清</text>
+    </view>
   </view>
 
   <!-- 分类明细账单弹窗 -->
@@ -278,7 +431,7 @@
           <text class="detail-item-note" wx:if="{{item.note}}">{{item.note}}</text>
         </view>
         <view class="detail-item-right">
-          <text class="detail-item-amount {{item.type==='expense'?'expense':'income'}}">{{item.type==='expense'?'-':'+'}}¥{{item.amount}}</text>
+          <text class="detail-item-amount {{item.type==='expense'?'expense':'income'}}">{{item.type==='expense'?'-':'+'}}{{baseSymbol}}{{item.amount}}</text>
           <text class="detail-item-pay">{{item.paymentDisplay}}</text>
         </view>
         <text class="detail-item-arrow">›</text>

@@ -1,6 +1,7 @@
 // pages/fuel/fuel.js - 油耗统计页（每辆车独立统计）
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
+const { baseAmountOf, resolveBaseCurrency, getSymbol, formatMoney, isPending } = require('../../utils/currency')
 
 const fmtDate = (d) => {
   if (!d) return ''
@@ -10,20 +11,25 @@ const fmtDate = (d) => {
 }
 
 // 对某辆车（或未指定车辆）的油费记录做完整统计
-function computeVehicle(tx) {
+// 金额一律使用本位币口径（base_amount），与首页/预算/分析保持一致
+function computeVehicle(tx, baseCurrency) {
+  const cur = baseCurrency || 'CNY'
   // 仅取有有效里程的记录用于油耗/每公里计算，按里程升序
   const valid = tx
     .filter(t => t.odometer != null && !isNaN(Number(t.odometer)))
     .map(t => ({
       ...t,
       odometer: Number(t.odometer),
-      amount: Number(t.amount),
+      amount: baseAmountOf(t),
+      // 外币待结算：本位币金额未定，不参与金额与每公里计算
+      pending: isPending(t),
       fuel_liters: (t.fuel_liters != null && !isNaN(Number(t.fuel_liters))) ? Number(t.fuel_liters) : null,
     }))
     .sort((a, b) => a.odometer - b.odometer)
 
   let totalLiters = 0, totalAmount = 0
   valid.forEach(r => {
+    if (r.pending) return
     totalAmount += r.amount
     if (r.fuel_liters != null) totalLiters += r.fuel_liters
   })
@@ -31,7 +37,7 @@ function computeVehicle(tx) {
 
   const summary = {
     count: valid.length,
-    totalAmount: totalAmount.toFixed(2),
+    totalAmount: formatMoney(totalAmount, cur, { symbol: false }),
     totalLiters: totalLiters > 0 ? totalLiters.toFixed(2) : '--',
     totalDist: totalDist > 0 ? totalDist.toFixed(0) : '--',
     avgConsumption: (totalDist > 0 && totalLiters > 0) ? (totalLiters / totalDist * 100).toFixed(2) : null,
@@ -45,14 +51,16 @@ function computeVehicle(tx) {
       dist = r.odometer - prev.odometer
       if (dist > 0) {
         consumption = r.fuel_liters != null ? (r.fuel_liters / dist * 100).toFixed(2) : null
-        perKm = (r.amount / dist).toFixed(3)
+        // 待结算油费本位币金额未定，不算每公里花费（否则会算成 0）
+        perKm = r.pending ? null : (r.amount / dist).toFixed(3)
       }
     }
     return {
       id: r.id,
       date: r.date,
       dateLabel: fmtDate(r.date),
-      amount: r.amount.toFixed(2),
+      pending: !!r.pending,
+      amount: r.pending ? '0.00' : formatMoney(r.amount, cur, { symbol: false }),
       liters: r.fuel_liters != null ? r.fuel_liters.toFixed(2) : '--',
       odometer: r.odometer,
       dist: (dist != null && dist > 0) ? dist.toFixed(0) : null,
@@ -68,16 +76,19 @@ function computeVehicle(tx) {
   tx.forEach(t => {
     const m = (t.date || '').slice(0, 7)
     if (!m) return
-    monthMap[m] = (monthMap[m] || 0) + Number(t.amount)
+    monthMap[m] = (monthMap[m] || 0) + baseAmountOf(t)
   })
   const monthlyStats = Object.entries(monthMap)
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([month, amount]) => {
       const p = month.split('-')
-      return { month, monthLabel: `${p[0]}年${parseInt(p[1])}月`, amount: amount.toFixed(2) }
+      return { month, monthLabel: `${p[0]}年${parseInt(p[1])}月`, amount: formatMoney(amount, cur, { symbol: false }) }
     })
 
-  return { summary, records, monthlyStats, recordCount: tx.length }
+  // 待结算油费：未入账，不计入累计油费与每公里花费
+  const pendingCount = tx.filter(t => isPending(t)).length
+
+  return { summary, records, monthlyStats, recordCount: tx.length, pendingCount }
 }
 
 Page({
@@ -91,17 +102,29 @@ Page({
     monthlyStats: [],
     records: [],
     hasData: false,
+    // 多币种：油费金额统一按账本本位币展示
+    baseCurrency: 'CNY',
+    baseSymbol: '¥',
+    pendingCount: 0,
+  },
+
+  // 账本本位币字段
+  _baseFields() {
+    const ledger = app.globalData.currentLedger
+    const baseCurrency = resolveBaseCurrency(ledger)
+    return { baseCurrency, baseSymbol: getSymbol(baseCurrency) }
   },
 
   onLoad() {
     const user = app.globalData.user
-    this.setData({ isGuest: !user, user: user || null })
+    this.setData({ isGuest: !user, user: user || null, ...this._baseFields() })
     if (user) this.loadData()
   },
 
   onShow() {
     const user = app.globalData.user
     if (user && user.id) app.checkAccountStatus()
+    this.setData(this._baseFields())
     if (user) this.loadData()
   },
 
@@ -121,7 +144,7 @@ Page({
       const { data: vehicles } = await supabase.from('vehicles')
         .select('id,name').eq('ledger_id', currentLedger.id).order('created_at')
       const { data: fuelTx } = await supabase.from('transactions')
-        .select('id,amount,date,vehicle_id,fuel_liters,odometer,fuel_consumption,note')
+        .select('id,amount,base_amount,reference_amount,currency,settlement_status,date,vehicle_id,fuel_liters,odometer,fuel_consumption,note')
         .eq('ledger_id', currentLedger.id).eq('category', '油费').order('date')
 
       this._vehicles = vehicles || []
@@ -171,12 +194,13 @@ Page({
       return
     }
     const cur = tabs[activeTab] || tabs[0]
-    const r = computeVehicle(cur.tx || [])
+    const r = computeVehicle(cur.tx || [], this.data.baseCurrency)
     this.setData({
       loading: false,
       summary: r.summary,
       records: r.records,
       monthlyStats: r.monthlyStats,
+      pendingCount: r.pendingCount,
     })
   },
 

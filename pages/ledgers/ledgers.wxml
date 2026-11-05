@@ -54,6 +54,14 @@
         <view class="ledger-info">
           <text class="ledger-name">{{item.displayName || item.name}}<text class="default-tag-inline" wx:if="{{getDefaultId() === item.id}}"> ⭐默认</text></text>
           <text class="ledger-date">{{item.created_at}}</text>
+          <view class="ledger-cur-row" catchtap="noop">
+            <picker range="{{currencyLabels}}" value="{{item.currencyIndex}}" data-index="{{index}}" bindchange="onLedgerCurrencyChange">
+              <view class="ledger-cur">
+                <text class="ledger-cur-label">本位币</text>
+                <text class="ledger-cur-code">{{item.base_currency || 'CNY'}} ▾</text>
+              </view>
+            </picker>
+          </view>
         </view>
         <view class="ledger-check" wx:if="{{currentLedger && currentLedger.id===item.id}}">✓</view>
       </view>

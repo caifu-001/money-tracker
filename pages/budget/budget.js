@@ -2,6 +2,7 @@
 const app = getApp()
 const { supabase } = require('../../utils/supabase')
 const { DEFAULT_EXPENSE_CATEGORIES } = require('../../utils/categories')
+const { formatMoney, baseAmountOf, statAmountOf, resolveBaseCurrency, getSymbol, round2, isPending, getReferenceAmount } = require('../../utils/currency')
 
 // 把树形预置类别展平为 { name, icon } 数组（含所有层级）
 function flattenCategories(cats, parentIcon) {
@@ -31,11 +32,23 @@ Page({
     monthLabel: '',
     year: 2026,
     month: 1,
+    // 多币种：预算与支出统一按账本本位币口径
+    baseCurrency: 'CNY',
+    baseSymbol: '¥',
+    totalBudgetText: '0.00',
+    totalSpentText: '0.00',
+    totalRemainingText: '0.00',
     showEditModal: false,
     editCatName: '',
     editCatIcon: '',
     editAmount: '',
     showMonthPicker: false,
+  },
+
+  // 账本本位币字段
+  _baseFields(ledger) {
+    const baseCurrency = resolveBaseCurrency(ledger)
+    return { baseCurrency, baseSymbol: getSymbol(baseCurrency) }
   },
 
   onLoad() {
@@ -44,7 +57,7 @@ Page({
     const month = now.getMonth() + 1
     const user = app.globalData.user
     const ledger = app.globalData.currentLedger
-    this.setData({ user: user || null, isGuest: !user, year, month, monthLabel: `${year}年${month}月`, currentLedger: ledger || null, loading: !user })
+    this.setData({ user: user || null, isGuest: !user, year, month, monthLabel: `${year}年${month}月`, currentLedger: ledger || null, loading: !user, ...this._baseFields(ledger) })
     if (user) this.loadData(year, month)
   },
 
@@ -55,7 +68,7 @@ Page({
     const ledger = app.globalData.currentLedger
     const { year, month } = this.data
     if (ledger && ledger.id !== this.data.currentLedger?.id) {
-      this.setData({ currentLedger: ledger })
+      this.setData({ currentLedger: ledger, ...this._baseFields(ledger) })
     }
     if (user) this.loadData(year, month)
   },
@@ -101,9 +114,9 @@ Page({
     ;(budgets || []).forEach(b => { budgetMap[b.category] = Number(b.amount) })
     console.log('[Budget] 预算设置:', budgetMap)
 
-    // 查询支出
+    // 查询支出（base_amount = 本位币口径，预算与本位币同基准才能比）
     const { data: txs, error: txError } = await supabase.from('transactions')
-      .select('amount, type, category')
+      .select('amount, base_amount, reference_amount, currency, settlement_status, type, category')
       .eq('ledger_id', currentLedger.id)
       .eq('type', 'expense')
       .gte('date', startDate).lte('date', endDate)
@@ -111,12 +124,22 @@ Page({
     if (txs && txs.length > 0) console.log('[Budget] 前5条:', txs.slice(0, 5))
 
     // 按类别聚合：取 category 字段值直接作 key（记账时存的就是类别 name，无 emoji）
+    // 用 statAmountOf：借款（借出）不算消费，不能撑爆预算
     const spentMap = {}
     ;(txs || []).forEach(t => {
       const key = (t.category || '其他').trim()
-      spentMap[key] = Math.round(((spentMap[key] || 0) + Number(t.amount)) * 100) / 100
+      spentMap[key] = round2((spentMap[key] || 0) + statAmountOf(t))
     })
     console.log('[Budget] spentMap:', spentMap)
+
+    // 待结算：外币消费银行尚未入账，本位币金额未知，不计入已花金额。
+    // 必须显式提示，否则用户会误以为预算还剩很多。
+    const pendingList = (txs || []).filter(t => isPending(t))
+    const pendingCount = pendingList.length
+    const pendingRefTotal = round2(pendingList.reduce((s, t) => {
+      const r = getReferenceAmount(t)
+      return s + (r != null ? r : 0)
+    }, 0))
 
     // 查询数据库自定义类别
     const { data: customCats } = await supabase.from('categories')
@@ -128,12 +151,19 @@ Page({
     ;(customCats || []).forEach(c => { allCatsMap[c.name] = c.icon || '📌' })
     console.log('[Budget] allCatsMap keys:', Object.keys(allCatsMap), '共', Object.keys(allCatsMap).length, '个')
 
-    // 构建列表
+    // 构建列表（预算金额与支出同为本位币口径）
+    const baseCurrency = this.data.baseCurrency
     const catList = Object.entries(allCatsMap).map(([name, icon]) => {
       const amount = budgetMap[name] || 0
       const spent = spentMap[name] || 0  // 直接精确匹配类别名
-      return { category: name, icon, amount, spent, remaining: amount - spent,
-               percent: amount > 0 ? Math.round(spent / amount * 100) : 0 }
+      const remaining = round2(amount - spent)
+      return {
+        category: name, icon, amount, spent, remaining,
+        amountText: formatMoney(amount, baseCurrency, { symbol: false }),
+        spentText: formatMoney(spent, baseCurrency, { symbol: false }),
+        remainingText: formatMoney(remaining, baseCurrency, { symbol: false }),
+        percent: amount > 0 ? Math.round(spent / amount * 100) : 0
+      }
     })
 
     // 有预算的排前，再按支出排序
@@ -145,17 +175,25 @@ Page({
 
     const totalBudgetSaved = budgetMap['__TOTAL__'] || 0
     const totalBudget = catList.reduce((s, i) => s + i.amount, 0)
-    const totalSpent = Math.round(catList.reduce((s, i) => s + (i.spent || 0), 0) * 100) / 100
-    const totalRemaining = totalBudget - totalSpent
+    const totalSpent = round2(catList.reduce((s, i) => s + (i.spent || 0), 0))
     const budgetForPercent = totalBudget > 0 ? totalBudget : totalBudgetSaved
+    const totalRemaining = round2(budgetForPercent - totalSpent)
     const overallPercent = budgetForPercent > 0 ? Math.round(totalSpent / budgetForPercent * 100) : 0
 
     this.setData({
       catList, loading: false,
       totalBudget: budgetForPercent, totalBudgetSaved, totalSpent,
-      totalRemaining: budgetForPercent - totalSpent, overallPercent
+      totalRemaining, overallPercent,
+      totalBudgetText: formatMoney(budgetForPercent, baseCurrency, { symbol: false }),
+      overviewBudgetText: formatMoney(totalBudgetSaved || totalBudget, baseCurrency, { symbol: false }),
+      totalSpentText: formatMoney(totalSpent, baseCurrency, { symbol: false }),
+      totalRemainingText: formatMoney(totalRemaining, baseCurrency, { symbol: false }),
+      pendingCount,
+      pendingRefTotal,
+      pendingRefText: formatMoney(pendingRefTotal, baseCurrency, { symbol: false }),
     })
-    console.log('[Budget] 最终结果 totalSpent=' + totalSpent + ' overallPercent=' + overallPercent + '%')
+    console.log('[Budget] 最终结果 totalSpent=' + totalSpent + ' overallPercent=' + overallPercent + '%'
+      + ' 待结算=' + pendingCount + ' 笔')
   },
 
   openEdit(e) {

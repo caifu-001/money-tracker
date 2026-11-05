@@ -39,6 +39,21 @@
 .balance-value.expense { color: #ef4444; }
 
 /* ========== 视图切换 Tab ========== */
+.pending-banner { margin: 20rpx 24rpx 0; background: #eef2ff; border: 3rpx solid #c7d2fe; border-radius: 16rpx; padding: 20rpx 24rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.pending-banner .pb-text { flex: 1; font-size: 24rpx; color: #4338ca; }
+.pending-banner .pb-more { color: #4f46e5; }
+/* 转账提示条（转账不计收支，与待结算提示区分配色） */
+.transfer-banner { margin: 20rpx 24rpx 0; background: #faf5ff; border: 3rpx solid #e9d5ff; border-radius: 16rpx; padding: 20rpx 24rpx; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.transfer-banner .pb-text { flex: 1; font-size: 24rpx; color: #7e22ce; }
+.transfer-banner .pb-more { color: #7e22ce; }
+/* 提示条右侧「查看 ›」行动点 */
+.pb-more { font-size: 24rpx; font-weight: 700; flex-shrink: 0; }
+/* 账户视图：转账流动 */
+.breakdown-title.transfer { color: #7e22ce; }
+.bi-amount.transfer { color: #7e22ce; }
+.tf-mid { display: flex; flex-direction: column; gap: 4rpx; }
+.tf-date { font-size: 22rpx; color: #9ca3af; }
+.tf-hint { font-size: 22rpx; color: #9ca3af; display: block; margin-top: 16rpx; }
 .view-tabs { display: flex; margin: 24rpx 24rpx 0; background: #fff; border-radius: 20rpx; padding: 6rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06); }
 .view-tab { flex: 1; height: 72rpx; display: flex; align-items: center; justify-content: center; font-size: 26rpx; color: #9ca3af; font-weight: 500; border-radius: 16rpx; transition: all 0.2s; }
 .view-tab text { color: inherit; font-size: 26rpx; }
@@ -46,8 +61,9 @@
 .view-tab.active text { color: #fff; }
 
 /* ========== 搜索 ========== */
-.search-card { margin: 24rpx 24rpx 0; background: #fff; border-radius: 16rpx; padding: 20rpx 24rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06); }
-.search-input { font-size: 28rpx; color: #1f2937; width: 100%; }
+.search-card { display: flex; align-items: center; gap: 16rpx; margin: 24rpx 24rpx 0; background: #fff; border-radius: 16rpx; padding: 20rpx 24rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06); }
+.search-input { flex: 1; font-size: 28rpx; color: #1f2937; }
+.search-clear { width: 48rpx; height: 48rpx; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #f1f5f9; color: #94a3b8; font-size: 24rpx; flex-shrink: 0; }
 
 /* ========== 分类目录筛选 ========== */
 .cat-filter-bar { display: flex; align-items: center; margin: 16rpx 24rpx 0; gap: 16rpx; }
@@ -151,6 +167,31 @@
 .sub-amount.income { color: #34d399; }
 .sub-pct { font-size: 20rpx; color: #9ca3af; min-width: 60rpx; text-align: right; }
 
+/* ========== 构成列表（统一占比可视化：进度条即占比，明细即图例） ========== */
+.bd-card { margin: 24rpx 24rpx 0; background: #fff; border-radius: 24rpx; padding: 32rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06); }
+.bd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16rpx; margin-bottom: 8rpx; }
+.bd-head-title { font-size: 30rpx; font-weight: 700; color: #1f2937; }
+.bd-head-sub { font-size: 22rpx; color: #9ca3af; flex-shrink: 0; }
+.bd-row { padding: 22rpx 0; border-bottom: 1rpx solid #f3f4f6; }
+.bd-row:last-child { border-bottom: none; }
+.bd-row-top { display: flex; align-items: center; gap: 12rpx; margin-bottom: 14rpx; }
+.bd-row-icon { font-size: 34rpx; }
+.bd-row-name { flex: 1; font-size: 28rpx; font-weight: 600; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-row-amt { font-size: 28rpx; font-weight: 800; flex-shrink: 0; }
+.bd-row-amt.expense { color: #ef4444; }
+.bd-row-amt.income { color: #22c55e; }
+.bd-row-amt.account { color: #6366f1; }
+.bd-row-amt.transfer { color: #7e22ce; }
+.bd-row-bar { display: flex; align-items: center; gap: 16rpx; }
+.bd-track { flex: 1; height: 14rpx; background: #f1f5f9; border-radius: 7rpx; overflow: hidden; }
+.bd-fill { height: 100%; border-radius: 7rpx; transition: width 0.4s ease; }
+.bd-fill.expense { background: linear-gradient(90deg, #fca5a5, #ef4444); }
+.bd-fill.income { background: linear-gradient(90deg, #86efac, #22c55e); }
+.bd-fill.account { background: linear-gradient(90deg, #a5b4fc, #6366f1); }
+.bd-fill.transfer { background: linear-gradient(90deg, #d8b4fe, #a855f7); }
+.bd-pct { font-size: 22rpx; color: #94a3b8; min-width: 72rpx; text-align: right; }
+.bd-foot { display: block; margin-top: 20rpx; font-size: 22rpx; color: #9ca3af; line-height: 1.5; }
+
 /* ========== 空状态 & 加载 ========== */
 .empty-state { margin: 24rpx 24rpx 0; background: #fff; border-radius: 24rpx; padding: 80rpx 40rpx; box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06); display: flex; flex-direction: column; align-items: center; gap: 16rpx; }
 .empty-emoji { font-size: 80rpx; }
@@ -178,3 +219,76 @@
 .detail-item-pay { font-size: 22rpx; color: #9ca3af; }
 .detail-item-arrow { margin-left: 16rpx; color: #d1d5db; font-size: 36rpx; }
 .detail-empty { text-align: center; padding: 80rpx 0; color: #9ca3af; font-size: 28rpx; }
+/* 待结算弹窗：顶部说明 + 底部合计 */
+.pending-tip { margin: 20rpx 32rpx 0; background: #eef2ff; border-radius: 12rpx; padding: 18rpx 20rpx; }
+.pending-tip text { font-size: 22rpx; color: #4338ca; line-height: 1.6; }
+.pending-tip .hl { color: #ef4444; font-weight: 700; }
+.pending-foot { padding: 20rpx 32rpx 32rpx; border-top: 1rpx solid #f3f4f6; }
+.pending-foot text { font-size: 22rpx; color: #9ca3af; }
+
+/* ========== 借款视图（022） ==========
+   颜色语义：receivable 待收回=青（对方欠我）/ payable 待偿还=橙（我欠对方）/ settled=灰
+   与 支出红 / 收入绿 / 账户靛 / 转账紫 都不冲突 */
+.loan-glance {
+  margin: 24rpx 24rpx 0; background: #fff; border-radius: 16rpx;
+  padding: 28rpx 24rpx; display: flex; align-items: center;
+  box-shadow: 0 4rpx 16rpx rgba(0,0,0,0.06);
+}
+.lg-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8rpx; }
+.lg-split { width: 1rpx; height: 80rpx; background: #f3f4f6; }
+.lg-label { font-size: 24rpx; color: #9ca3af; }
+.lg-value { font-size: 40rpx; font-weight: 800; }
+.lg-sub { font-size: 22rpx; color: #9ca3af; }
+.lg-value.receivable { color: #0d9488; }
+.lg-value.payable { color: #ea580c; }
+
+.loan-net-bar {
+  margin: 16rpx 24rpx 0; background: #f9fafb; border-radius: 16rpx;
+  padding: 20rpx 24rpx; display: flex; align-items: baseline; gap: 12rpx;
+}
+.lnb-label { font-size: 24rpx; color: #6b7280; }
+.lnb-value { font-size: 32rpx; font-weight: 800; }
+.lnb-value.receivable { color: #0d9488; }
+.lnb-value.payable { color: #ea580c; }
+.lnb-hint { font-size: 22rpx; color: #9ca3af; }
+.lnb-foot { margin-left: auto; font-size: 20rpx; color: #d1d5db; }
+
+/* 按对方：一行一人 */
+.ln-row { display: flex; align-items: center; padding: 24rpx 0; border-bottom: 1rpx solid #f3f4f6; }
+.ln-row:last-of-type { border-bottom: none; }
+.ln-avatar {
+  width: 64rpx; height: 64rpx; border-radius: 50%;
+  background: #f0fdfa; display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx; flex-shrink: 0; margin-right: 20rpx;
+}
+.ln-mid { flex: 1; display: flex; flex-direction: column; gap: 6rpx; min-width: 0; }
+.ln-name { font-size: 28rpx; font-weight: 700; color: #1f2937; }
+.ln-sub { font-size: 22rpx; color: #9ca3af; }
+.ln-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6rpx; }
+.ln-net { font-size: 30rpx; font-weight: 800; }
+.ln-net.receivable { color: #0d9488; }
+.ln-net.payable { color: #ea580c; }
+.ln-net.settled { color: #9ca3af; }
+.ln-tag { font-size: 20rpx; padding: 2rpx 12rpx; border-radius: 10rpx; }
+.ln-tag.receivable { background: #ccfbf1; color: #115e59; }
+.ln-tag.payable { background: #ffedd5; color: #9a3412; }
+.ln-tag.settled { background: #f3f4f6; color: #6b7280; }
+.loan-empty-hint { font-size: 22rpx; color: #9ca3af; margin-top: 12rpx; text-align: center; }
+
+/* 借款明细弹窗 */
+.loan-detail-net {
+  margin: 20rpx 32rpx 0; padding: 20rpx 24rpx; border-radius: 12rpx;
+  display: flex; align-items: baseline; justify-content: space-between;
+}
+.loan-detail-net.receivable { background: #f0fdfa; }
+.loan-detail-net.payable { background: #fff7ed; }
+.loan-detail-net.settled { background: #f9fafb; }
+.ldn-label { font-size: 24rpx; color: #6b7280; }
+.ldn-value { font-size: 34rpx; font-weight: 800; }
+.loan-detail-net.receivable .ldn-value { color: #0d9488; }
+.loan-detail-net.payable .ldn-value { color: #ea580c; }
+.loan-detail-net.settled .ldn-value { color: #9ca3af; }
+.detail-item-cat { font-size: 28rpx; font-weight: 600; color: #1f2937; }
+.loan-detail-amt { font-size: 28rpx; font-weight: 800; margin-left: auto; }
+.loan-detail-amt.out { color: #0d9488; }
+.loan-detail-amt.in { color: #ea580c; }

@@ -151,6 +151,16 @@
   <view class="manage-all-btn" bindtap="goLedgersPage">完整管理 ›</view>
 </view>
 
+<!-- 资金账户入口 -->
+<view class="accounts-entry-card" bindtap="goAccountsPage">
+  <text class="aec-icon">💼</text>
+  <view class="aec-info">
+    <text class="aec-title">资金账户与负债</text>
+    <text class="aec-desc">现金 / 储蓄卡 / 信用卡，还款不重复计入支出</text>
+  </view>
+  <text class="aec-arrow">›</text>
+</view>
+
 <!-- 新建 -->
 <view class="create-card" bindtap="toggleCreate" wx:if="{{!showCreate}}">
   <text class="create-icon">➕</text>

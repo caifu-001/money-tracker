@@ -92,9 +92,31 @@
 <view class="reimburse-summary" wx:if="{{!isGuest && pendingReimburseTotal!=='0.00'}}">
 <text class="reimburse-label">🧾 待报销</text>
 <view class="reimburse-right">
-<text class="reimburse-value">¥{{pendingReimburseTotal}}</text>
+<text class="reimburse-value">{{baseSymbol}}{{pendingReimburseTotal}}</text>
 <text class="settle-btn" bindtap="settleAllReimburse">核销</text>
 </view>
+</view>
+<!-- 外币待结算：银行未入账，本位币金额未定，未计入上方收支 -->
+<view class="pending-summary" wx:if="{{!isGuest && pendingCount>0}}">
+<text class="pending-label">⏳ 待结算 · 未计入收支</text>
+<view class="pending-right">
+<text class="pending-value">{{pendingCount}} 笔<text wx:if="{{pendingRefTotal!=='0.00'}}"> · 参考 {{baseSymbol}}{{pendingRefTotal}}</text></text>
+<text class="pending-toggle" bindtap="togglePendingFilter">{{showPendingOnly?'显示全部':'查看'}}</text>
+</view>
+</view>
+<!-- 借款未结清提示：别人欠我 / 我欠别人（净额法，反向记账自动抵消） -->
+<view class="loan-summary" wx:if="{{!isGuest && loanOverview.open}}" bindtap="goLoanAnalytics">
+<text class="loan-sum-label">🤝 {{loanOverview.partyCount}} 人借款未结清</text>
+<view class="loan-sum-right">
+<text class="loan-sum-in" wx:if="{{loanOverview.receivable>0}}">待收回 {{loanOverview.receivableText}}</text>
+<text class="loan-sum-out" wx:if="{{loanOverview.payable>0}}">待偿还 {{loanOverview.payableText}}</text>
+<text class="loan-sum-arrow">明细 ›</text>
+</view>
+</view>
+<!-- 资金账户入口：资产 / 负债账户与余额，信用卡还款在这里记 -->
+<view class="account-entry" wx:if="{{!isGuest}}" bindtap="goAccounts">
+<text class="ae-label">💼 资金账户与负债</text>
+<text class="ae-arrow">管理 ›</text>
 </view>
 </view>
 
@@ -102,8 +124,9 @@
 <view class="list-header">
 <text class="list-title">{{currentMonth}}月账目</text>
 <view class="list-header-right" wx:if="{{!isGuest}}">
-<text class="reimburse-filter {{showReimbursableOnly?'active':''}}" bindtap="toggleReimbursableFilter">🧾 待报销</text>
-<text class="list-count">共{{transactions.length}}条</text>
+      <text class="reimburse-filter {{showReimbursableOnly?'active':''}}" bindtap="toggleReimbursableFilter">🧾 待报销</text>
+      <text class="reimburse-filter loan-filter {{showLoanOnly?'active':''}}" bindtap="toggleLoanFilter">🤝 借款</text>
+      <text class="list-count">共{{listFiltered?displayCount:transactions.length}}条</text>
 </view>
 </view>
 <!-- 游客：显示引导文字 -->
@@ -117,26 +140,36 @@
 <!-- 已登录：按日分组 -->
 <view wx:elif="{{loading}}"><text class="loading">加载中...</text></view>
 <view wx:elif="{{transactions.length===0}}"><text class="empty-state">暂无账目，点击右下角按钮开始记账</text></view>
+<!-- 筛选后没有命中任何账目：整组不展示，这里兜底给出口 -->
+<view wx:elif="{{listFiltered && displayGroups.length===0}}" class="filter-empty">
+  <text class="fe-emoji">{{showPendingOnly?'⏳':(showLoanOnly?'🤝':'🧾')}}</text>
+  <text class="fe-text">{{showPendingOnly?'本月没有待结算账目':(showLoanOnly?'本月没有借款账目':'本月没有待报销账目')}}</text>
+  <text class="fe-reset" bindtap="clearListFilter">显示全部账目</text>
+</view>
 <block wx:else>
-<block wx:for="{{dailyGroups}}" wx:key="date" wx:for-item="group">
+<block wx:for="{{displayGroups}}" wx:key="date" wx:for-item="group">
   <!-- 日期头 + 当日小计 -->
   <view class="day-header">
     <text class="day-date">{{group.dateLabel}}</text>
     <view class="day-stats">
-      <text class="day-inc" wx:if="{{group.income !== '0.00'}}">收 ¥{{group.income}}</text>
+      <text class="day-inc" wx:if="{{group.income !== '0.00'}}">收 {{baseSymbol}}{{group.income}}</text>
       <text class="day-divider" wx:if="{{group.income !== '0.00' && group.expense !== '0.00'}}">|</text>
-      <text class="day-exp" wx:if="{{group.expense !== '0.00'}}">支 ¥{{group.expense}}</text>
+      <text class="day-exp" wx:if="{{group.expense !== '0.00'}}">支 {{baseSymbol}}{{group.expense}}</text>
+      <text class="day-loan" wx:if="{{group.loanOutText}}">借出 {{group.loanOutText}}</text>
+      <text class="day-loan" wx:if="{{group.loanInText}}">借入 {{group.loanInText}}</text>
     </view>
   </view>
   <!-- 当日交易列表 -->
-  <view class="tx-item" wx:for="{{group.items}}" wx:key="id" wx:for-item="item" wx:if="{{!showReimbursableOnly || (item.is_reimbursable && item.reimbursement_status==='pending')}}">
-    <view class="tx-icon {{item.type}}">{{item.categoryIcon}}</view>
+  <view class="tx-item" wx:for="{{group.items}}" wx:key="id" wx:for-item="item" wx:if="{{(!showReimbursableOnly || (item.is_reimbursable && item.reimbursement_status==='pending')) && (!showPendingOnly || item.isPending) && (!showLoanOnly || item.isLoan)}}">
+    <view class="tx-icon {{item.isLoan?'loan':item.type}}">{{item.categoryIcon}}</view>
     <view class="tx-info">
-      <text class="tx-cat">{{item.category}}<text class="tx-reimburse-badge" wx:if="{{item.is_reimbursable}}">{{item.reimbursement_status==='pending'?'🧾待报销':'✅已到账'}}</text></text>
-      <text class="tx-date">{{item.dateLabel}}{{item.paymentDisplay?" · "+item.paymentDisplay:""}}{{item.fuelInfo?" · "+item.fuelInfo:""}}{{item.note?" · "+item.note:""}}<text class="tx-recorder" wx:if="{{showRecorder && item.recorderName}}"> · {{item.recorderName}}</text></text>
+      <text class="tx-cat">{{item.isLoan ? (item.loanParty || item.category) : item.category}}<text class="tx-loan-badge" wx:if="{{item.isLoan}}">{{item.loanBadge}}</text><text class="tx-transfer-badge" wx:if="{{item.isTransfer}}">🔄转账</text><text class="tx-pending-badge" wx:if="{{item.isPending}}">⏳待结算</text><text class="tx-reimburse-badge" wx:if="{{item.is_reimbursable}}">{{item.reimbursement_status==='pending'?'🧾待报销':'✅已到账'}}</text></text>
+      <text class="tx-date">{{item.dateLabel}}{{item.accountTag?" · "+item.accountTag:""}}{{(!item.isTransfer && item.paymentDisplay)?" · "+item.paymentDisplay:""}}{{item.fuelInfo?" · "+item.fuelInfo:""}}{{item.note?" · "+item.note:""}}<text class="tx-recorder" wx:if="{{showRecorder && item.recorderName}}"> · {{item.recorderName}}</text></text>
     </view>
     <view class="tx-right">
-      <text class="tx-amount {{item.type}}">{{item.type==='income'?"+":"-"}}{{item.amountStr}}</text>
+      <text class="tx-amount {{item.isTransfer?'transfer':(item.isLoan?'loan':item.type)}}">{{item.isTransfer?"":(item.type==='income'?"+":"-")}}{{item.amountDisplay}}</text>
+      <text class="tx-convert pending" wx:if="{{item.isPending}}">{{item.pendingHint}}</text>
+      <text class="tx-convert" wx:elif="{{item.showConvert}}">≈ {{item.baseDisplay}}</text>
       <view class="tx-actions" wx:if="{{item.canEdit}}">
         <text catchtap="onEditTap" data-date="{{group.date}}" data-index="{{index}}">编辑</text>
         <text catchtap="onDeleteTap" data-date="{{group.date}}" data-index="{{index}}" class="tx-delete">删除</text>
@@ -186,21 +219,50 @@
 <view class="type-tabs">
 <text class="type-tab {{qaType==='expense'?'active-exp':''}}" bindtap="setQaType" data-type="expense">支出</text>
 <text class="type-tab {{qaType==='income'?'active-inc':''}}" bindtap="setQaType" data-type="income">收入</text>
+<text class="type-tab {{qaType==='transfer'?'active-tra':''}}" bindtap="setQaType" data-type="transfer">转账</text>
 </view>
-<view class="amount-input-wrap {{qaType==='expense'?'expense-bg':'income-bg'}}">
-<text class="yuan">¥</text>
+<view class="amount-input-wrap {{qaType==='expense'?'expense-bg':''}}{{qaType==='income'?'income-bg':''}}{{qaType==='transfer'?'transfer-bg':''}}">
+<text class="yuan">{{qaType==='transfer'?(accounts[qaAccountIndex] ? accounts[qaAccountIndex].name : '转账'):qaSymbol}}</text>
 <input type="digit" value="{{qaAmount}}" bindinput="onAmountInput" placeholder="0.00"/>
+</view>
+<!-- 币种选择 + 换算预览（转账为本位币划转，不需要币种） -->
+<view class="fx-row" wx:if="{{qaType!=='transfer'}}">
+<picker range="{{currencyLabels}}" value="{{qaCurrencyIndex}}" bindchange="onQaCurrencyChange">
+<view class="fx-pick"><text class="fx-code">{{qaCurrency}}</text><text class="fx-caret">▾</text></view>
+</picker>
+<text class="fx-preview {{qaRateWarn?'warn':''}}" wx:if="{{qaConvertHint}}">{{qaConvertHint}}</text>
+<text class="fx-preview" wx:else>本位币记账 · {{baseCurrency}}</text>
+</view>
+<!-- 转账：转出账户 → 转入账户 -->
+<view class="transfer-box" wx:if="{{qaType==='transfer'}}">
+<picker class="tf-pick-wrap" range="{{accounts}}" range-key="name" value="{{qaAccountIndex}}" bindchange="onQaAccountChange">
+<view class="tf-row">
+<text class="tf-label">转出</text>
+<text class="tf-name">{{accounts[qaAccountIndex] ? accounts[qaAccountIndex].name : '选择账户'}}</text>
+<text class="tf-caret">▾</text>
+</view>
+</picker>
+<view class="tf-swap" bindtap="swapQaAccounts">⇅</view>
+<picker class="tf-pick-wrap" range="{{accounts}}" range-key="name" value="{{qaToAccountIndex}}" bindchange="onQaToAccountChange">
+<view class="tf-row">
+<text class="tf-label">转入</text>
+<text class="tf-name">{{accounts[qaToAccountIndex] ? accounts[qaToAccountIndex].name : '选择账户'}}</text>
+<text class="tf-caret">▾</text>
+</view>
+</picker>
+<text class="tf-hint" wx:if="{{accounts.length===0}}">当前账本还没有账户，请先到「资金账户」页添加</text>
+<text class="tf-hint" wx:else>转账不计入收支，只改变两个账户的余额。还信用卡就选：银行卡 → 信用卡</text>
 </view>
 <picker mode="date" value="{{qaDate}}" bindchange="onQaDateChange">
 <view class="date-picker">{{qaDate}}</view>
 </picker>
-<view class="cat-grid">
+<view class="cat-grid" wx:if="{{qaType!=='transfer' && !qaIsLoan}}">
 <view class="cat-item {{qaCategory===item.name||qaExpandedKey===item.name?'selected':''}}" wx:for="{{currentCats}}" wx:key="name" bindtap="onCatTap" data-name="{{item.name}}" data-has-children="{{item.hasChildren}}">
 <text class="cat-icon">{{item.icon}}</text>
 <text class="cat-name">{{item.name}}</text>
 </view>
 </view>
-<view class="sub-panel" wx:if="{{qaExpandedKey && subCats.length>0}}">
+<view class="sub-panel" wx:if="{{qaType!=='transfer' && !qaIsLoan && qaExpandedKey && subCats.length>0}}">
 <view class="sub-header">
 <text>{{qaExpandedKey}} 的子分类</text>
 <text class="sub-self" bindtap="selectParentSelf">选「{{qaExpandedKey}}」本身</text>
@@ -243,19 +305,48 @@
 </view>
 <text class="fuel-hint">填升数+里程，自动算本次油耗（L/100km）</text>
 </view>
-<view class="pay-row">
+<!-- 资金账户：钱从哪个账户出/进（与支付方式并存） -->
+<view class="acc-row" wx:if="{{qaType!=='transfer' && accounts.length>0}}">
+<picker class="acc-pick-wrap" range="{{accounts}}" range-key="name" value="{{qaAccountIndex}}" bindchange="onQaAccountChange">
+<view class="acc-pick">
+<text class="acc-pick-label">💼 资金账户</text>
+<text class="acc-pick-name">{{accounts[qaAccountIndex] ? accounts[qaAccountIndex].name : '未选择'}}</text>
+<text class="tf-caret">▾</text>
+</view>
+</picker>
+</view>
+<!-- 支付方式 -->
+<view class="pay-row" wx:if="{{qaType!=='transfer'}}">
 <view class="pay-item {{qaPaymentMethod===item.id?'selected':''}}" wx:for="{{paymentMethods}}" wx:key="id" bindtap="onQaPaymentChange" data-id="{{item.id}}">
 <text class="pay-icon">{{item.icon}}</text>
 <text class="pay-name">{{item.name}}</text>
 </view>
 </view>
-<view class="reimburse-toggle" wx:if="{{qaType==='expense'}}" bindtap="onQaReimburseTap">
+<view class="reimburse-toggle" wx:if="{{qaType==='expense' && !qaIsLoan}}" bindtap="onQaReimburseTap">
 <view class="reimburse-checkbox {{qaReimbursable?'checked':''}}">
 <text wx:if="{{qaReimbursable}}">✓</text>
 </view>
 <text class="reimburse-toggle-label">🧾 可报销（公司公费）</text>
 </view>
-<view class="submit-btn {{qaType==='expense'?'expense-btn':'income-btn'}}" bindtap="handleQuickAdd">{{qaLoading?"提交中...":"确认记账"}}</view>
+<!-- 借款开关：支出方向=借出/还债，收入方向=借入/收回 -->
+<view class="loan-toggle {{qaIsLoan?'on':''}}" wx:if="{{qaType!=='transfer'}}" bindtap="onQaLoanTap">
+<view class="loan-checkbox {{qaIsLoan?'checked':''}}">
+<text wx:if="{{qaIsLoan}}">✓</text>
+</view>
+<text class="loan-toggle-label">🤝 借款<text class="loan-toggle-sub">（不计入收支）</text></text>
+</view>
+<view class="loan-box" wx:if="{{qaIsLoan && qaType!=='transfer'}}">
+<view class="loan-row">
+<text class="loan-label">{{qaType==='expense'?'借给谁':'向谁借'}}</text>
+<input class="loan-input" value="{{qaCounterparty}}" bindinput="onQaLoanPartyInput" placeholder="{{qaType==='expense'?'如：张三':'如：李四'}}" maxlength="20"/>
+</view>
+<view class="loan-quick" wx:if="{{loanPartyHistory.length>0}}">
+<text class="loan-quick-item" wx:for="{{loanPartyHistory}}" wx:key="*this" bindtap="pickLoanParty" data-name="{{item}}">{{item}}</text>
+</view>
+<text class="loan-hint" wx:if="{{qaType==='expense'}}">📤 借出：钱的去向是别人，不计入本月支出。对方还钱时在「收入」里勾借款记一笔，两条自动抵消。</text>
+<text class="loan-hint" wx:else>📥 借入：钱来自别人，不计入本月收入。还钱时在「支出」里勾借款记一笔，两条自动抵消。</text>
+</view>
+<view class="submit-btn {{qaIsLoan&&qaType!=='transfer'?'loan-btn':(qaType==='transfer'?'transfer-btn':(qaType==='expense'?'expense-btn':'income-btn'))}}" bindtap="handleQuickAdd">{{qaLoading?"提交中...":(qaType==='transfer'?"确认转账":(qaIsLoan?(qaType==='expense'?"确认借出":"确认借入"):"确认记账"))}}</view>
 </view>
 
 <!-- 编辑弹窗 -->
@@ -268,21 +359,62 @@
 <view class="type-tabs">
 <text class="type-tab {{editType==='expense'?'active-exp':''}}" bindtap="setEditType" data-type="expense">支出</text>
 <text class="type-tab {{editType==='income'?'active-inc':''}}" bindtap="setEditType" data-type="income">收入</text>
+<text class="type-tab {{editType==='transfer'?'active-tra':''}}" bindtap="setEditType" data-type="transfer">转账</text>
 </view>
-<view class="amount-input-wrap {{editType==='expense'?'expense-bg':'income-bg'}}">
-<text class="yuan">¥</text>
+<view class="amount-input-wrap {{editType==='expense'?'expense-bg':''}}{{editType==='income'?'income-bg':''}}{{editType==='transfer'?'transfer-bg':''}}">
+<text class="yuan">{{editType==='transfer'?(accounts[editAccountIndex] ? accounts[editAccountIndex].name : '转账'):editSymbol}}</text>
 <input type="digit" value="{{editAmount}}" bindinput="onEditAmountInput"/>
+</view>
+<!-- 币种选择 + 换算预览 -->
+<view class="fx-row" wx:if="{{editType!=='transfer'}}">
+<picker range="{{currencyLabels}}" value="{{editCurrencyIndex}}" bindchange="onEditCurrencyChange">
+<view class="fx-pick"><text class="fx-code">{{editCurrency}}</text><text class="fx-caret">▾</text></view>
+</picker>
+<text class="fx-preview {{editRateWarn?'warn':''}}" wx:if="{{editConvertHint}}">{{editConvertHint}}</text>
+<text class="fx-preview" wx:else>本位币记账 · {{baseCurrency}}</text>
+</view>
+<!-- 转账：转出账户 → 转入账户 -->
+<view class="transfer-box" wx:if="{{editType==='transfer'}}">
+<picker class="tf-pick-wrap" range="{{accounts}}" range-key="name" value="{{editAccountIndex}}" bindchange="onEditAccountChange">
+<view class="tf-row">
+<text class="tf-label">转出</text>
+<text class="tf-name">{{accounts[editAccountIndex] ? accounts[editAccountIndex].name : '选择账户'}}</text>
+<text class="tf-caret">▾</text>
+</view>
+</picker>
+<view class="tf-swap" bindtap="swapEditAccounts">⇅</view>
+<picker class="tf-pick-wrap" range="{{accounts}}" range-key="name" value="{{editToAccountIndex}}" bindchange="onEditToAccountChange">
+<view class="tf-row">
+<text class="tf-label">转入</text>
+<text class="tf-name">{{accounts[editToAccountIndex] ? accounts[editToAccountIndex].name : '选择账户'}}</text>
+<text class="tf-caret">▾</text>
+</view>
+</picker>
+<text class="tf-hint" wx:if="{{accounts.length===0}}">当前账本还没有账户，请先到「资金账户」页添加</text>
+<text class="tf-hint" wx:else>转账不计入收支，只改变两个账户的余额</text>
+</view>
+<!-- 结算校正：外币待结算，填银行账单上的实际扣款 -->
+<view class="settle-box" wx:if="{{editIsPending}}">
+<view class="settle-head">
+<text class="settle-title">⏳ 待结算</text>
+<text class="settle-desc">银行入账后，填实际扣的{{baseCurrency}}金额</text>
+</view>
+<view class="settle-input-wrap">
+<text class="settle-symbol">{{baseSymbol}}</text>
+<input class="settle-input" type="digit" value="{{settleAmount}}" bindinput="onSettleAmountInput" placeholder="银行实际扣款金额"/>
+</view>
+<text class="settle-hint">{{settleHint}}</text>
 </view>
 <picker mode="date" value="{{editDate}}" bindchange="onEditDateChange">
 <view class="date-picker">{{editDate}}</view>
 </picker>
-<view class="cat-grid">
+<view class="cat-grid" wx:if="{{editType!=='transfer' && !editIsLoan}}">
 <view class="cat-item {{editCategory===item.name?'selected':''}}" wx:for="{{editCats}}" wx:key="name" bindtap="onEditCatTap" data-name="{{item.name}}">
 <text class="cat-icon">{{item.icon}}</text>
 <text class="cat-name">{{item.name}}</text>
 </view>
 </view>
-<view class="sub-panel" wx:if="{{editExpandedKey && editSubCats.length>0}}">
+<view class="sub-panel" wx:if="{{!editIsLoan && editExpandedKey && editSubCats.length>0}}">
 <view class="sub-header">
 <text>{{editExpandedKey}} 的子分类</text>
 <text class="sub-self" bindtap="selectEditParentSelf">选「{{editExpandedKey}}」本身</text>
@@ -325,20 +457,45 @@
 </view>
 <text class="fuel-hint">填升数+里程，自动算本次油耗（L/100km）</text>
 </view>
-<view class="pay-row">
+<!-- 资金账户：钱从哪个账户出/进 -->
+<view class="acc-row" wx:if="{{editType!=='transfer' && accounts.length>0}}">
+<picker class="acc-pick-wrap" range="{{accounts}}" range-key="name" value="{{editAccountIndex}}" bindchange="onEditAccountChange">
+<view class="acc-pick">
+<text class="acc-pick-label">💼 资金账户</text>
+<text class="acc-pick-name">{{accounts[editAccountIndex] ? accounts[editAccountIndex].name : '未选择'}}</text>
+<text class="tf-caret">▾</text>
+</view>
+</picker>
+</view>
+<view class="pay-row" wx:if="{{editType!=='transfer'}}">
 <view class="pay-item {{editPaymentMethod===item.id?'selected':''}}" wx:for="{{paymentMethods}}" wx:key="id" bindtap="onEditPaymentChange" data-id="{{item.id}}">
 <text class="pay-icon">{{item.icon}}</text>
 <text class="pay-name">{{item.name}}</text>
 </view>
 </view>
-<view class="reimburse-toggle" wx:if="{{editType==='expense'}}" bindtap="onEditReimburseTap">
+<view class="reimburse-toggle" wx:if="{{editType==='expense' && !editIsLoan}}" bindtap="onEditReimburseTap">
 <view class="reimburse-checkbox {{editReimbursable?'checked':''}}">
 <text wx:if="{{editReimbursable}}">✓</text>
 </view>
 <text class="reimburse-toggle-label">🧾 可报销（公司公费）</text>
 </view>
+<!-- 借款开关（编辑） -->
+<view class="loan-toggle {{editIsLoan?'on':''}}" wx:if="{{editType!=='transfer'}}" bindtap="onEditLoanTap">
+<view class="loan-checkbox {{editIsLoan?'checked':''}}">
+<text wx:if="{{editIsLoan}}">✓</text>
+</view>
+<text class="loan-toggle-label">🤝 借款<text class="loan-toggle-sub">（不计入收支）</text></text>
+</view>
+<view class="loan-box" wx:if="{{editIsLoan && editType!=='transfer'}}">
+<view class="loan-row">
+<text class="loan-label">{{editType==='expense'?'借给谁':'向谁借'}}</text>
+<input class="loan-input" value="{{editCounterparty}}" bindinput="onEditLoanPartyInput" placeholder="{{editType==='expense'?'如：张三':'如：李四'}}" maxlength="20"/>
+</view>
+<text class="loan-hint" wx:if="{{editType==='expense'}}">📤 借出：不计入本月支出。对方还钱时在「收入」里勾借款记一笔，两条自动抵消。</text>
+<text class="loan-hint" wx:else>📥 借入：不计入本月收入。还钱时在「支出」里勾借款记一笔，两条自动抵消。</text>
+</view>
 <view class="edit-btns">
-<view class="submit-btn {{editType==='expense'?'expense-btn':'income-btn'}}" bindtap="handleEdit">{{editLoading?"保存中...":"保存修改"}}</view>
+<view class="submit-btn {{editIsLoan&&editType!=='transfer'?'loan-btn':(editType==='expense'?'expense-btn':(editType==='income'?'income-btn':'transfer-btn'))}}" bindtap="handleEdit">{{editLoading?"保存中...":(editType==='transfer'?"保存转账":(editIsLoan?"保存借款":"保存修改"))}}</view>
 <view class="delete-btn" bindtap="handleDelete">删除</view>
 </view>
 </view>

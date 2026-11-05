@@ -30,6 +30,8 @@ page { background: #f0f2f7; }
 
 .tip-banner { margin: 20rpx 32rpx; background: #fef3c7; border-radius: 16rpx; padding: 20rpx 24rpx; }
 .tip-banner text { font-size: 24rpx; color: #92400e; }
+.pending-banner { margin: 20rpx 32rpx 0; background: #eef2ff; border: 3rpx solid #c7d2fe; border-radius: 16rpx; padding: 20rpx 24rpx; }
+.pending-banner .pb-text { font-size: 24rpx; color: #4338ca; }
 .loading { padding: 80rpx; text-align: center; }
 .loading-text { color: #9ca3af; font-size: 28rpx; }
 
