@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="description" content="游游记账 - 家庭协同记账应用" />
+    <title>游游记账</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      html {
+        background: #dde1f5;
+        min-height: 100%;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        background: #dde1f5;
+        min-height: 100dvh;
+      }
+
+      /* 移动端限制宽度 */
+      @media (max-width: 520px) {
+        #root {
+          max-width: 480px;
+          margin: 0 auto;
+          min-height: 100dvh;
+          background: #f3f4f6;
+          position: relative;
+          box-shadow: 0 0 60px rgba(99, 102, 241, 0.15);
+          overflow-x: hidden;
+        }
+      }
+
+      /* 电脑端全宽度 */
+      @media (min-width: 521px) {
+        #root {
+          min-height: 100dvh;
+          background: #f3f4f6;
+          position: relative;
+        }
+      }
+
+      /* 滚动条美化 */
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
