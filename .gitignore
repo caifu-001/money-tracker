@@ -42,3 +42,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 二进制工具不入库（supabase CLI 等，按需自行下载）
+*.exe
